@@ -367,6 +367,9 @@ const FEATS = [
   ['gros', 'Vente', 'Prix de gros', 'Bouton « Client grossiste » à la caisse', 1],
   ['nego', 'Vente', 'Marchandage', 'Le vendeur négocie jusqu\'au prix minimum que vous fixez', 1],
   ['remise', 'Vente', 'Remises', 'Toujours avec votre code', 1],
+  ['variantes', 'Vente', 'Tailles et couleurs', 'Vêtements, chaussures : un modèle en plusieurs tailles et couleurs, chacune avec son stock et ses étiquettes', 0],
+  ['retours', 'Vente', 'Retours et échanges', 'Le client rapporte un article : remboursement ou échange, avec votre code', 1],
+  ['peremption', 'Vente', 'Dates de péremption', 'Alerte avant la date, pour vendre d\'abord ce qui expire', 0],
   ['photos', 'Vente', 'Photos des produits', 'Reconnaître les produits à l\'image', 1],
   ['shifts', 'Contrôle', 'Ouverture et fermeture de caisse', 'Chaque vendeur compte son argent en fin de poste', 1],
   ['blind', 'Contrôle', 'Comptage à l\'aveugle', 'Le vendeur ne voit pas combien il devrait avoir', 1],
@@ -709,14 +712,15 @@ VIEWS.vendre = function () {
   }
   const cats = ['Tout', ...new Set(db.products.filter(p => p.active).map(p => p.cat))];
   const q = ui.q.toLowerCase(), canManual = isOwner() || db.settings.manualAllowed;
-  const list = db.products.filter(p => p.active && (ui.cat === 'Tout' || p.cat === ui.cat) && (!q || p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q)));
+  let list = db.products.filter(p => p.active && (ui.cat === 'Tout' || p.cat === ui.cat) && (!q || p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q)));
+  if (F('variantes')) { const seen = new Set(); list = list.filter(p => { if (!p.model) return true; if (seen.has(p.model)) return false; seen.add(p.model); return true; }).map(p => p.model ? { ...p, _m: true, name: p.mName, stock: modelVars(p.model).reduce((a, x) => a + x.stock, 0) } : p); }
   const inCart = {}; cart.items.forEach(i => inCart[i.pid] = (inCart[i.pid] || 0) + (i.mode === 'pack' ? 1 : (isDec(prod(i.pid) || {}) ? 1 : i.qty)));
   main().innerHTML = `
     <button class="btn acc full xl" style="margin:6px 0 12px" onclick="scanToCart()">${ic('scan', 'l')} ${T('Scanner les articles')}</button>
     ${canManual ? `<div class="search">${ic('search', 's')}<input id="cq" placeholder="${T('Chercher un produit')}" value="${esc(ui.q)}"></div>
     <div class="chips">${cats.map(c => `<button class="chip ${c === ui.cat ? 'on' : ''}" data-c="${esc(c)}">${c === 'Tout' ? T('Tout') : esc(c)}</button>`).join('')}</div>
-    ${list.length ? `<div class="pgrid">${list.map(p => `<button class="pc ${p.stock <= 0 ? 'out' : ''}" onclick="tapProduct('${p.id}')">
-       ${inCart[p.id] ? `<span class="q">${inCart[p.id]}</span>` : ''}
+    ${list.length ? `<div class="pgrid">${list.map(p => `<button class="pc ${p.stock <= 0 ? 'out' : ''}" onclick="${p._m ? `pickVariant('${p.model}')` : `tapProduct('${p.id}')`}">
+       ${p._m ? (n => n ? `<span class="q">${n}</span>` : '')(modelVars(p.model).reduce((a, x) => a + (inCart[x.id] || 0), 0)) : inCart[p.id] ? `<span class="q">${inCart[p.id]}</span>` : ''}
        <div class="ph" style="background-color:${hue(p.name)};${p.photo && F('photos') ? `background-image:url(${p.photo})` : ''}">${p.photo && F('photos') ? '' : esc(p.name[0].toUpperCase())}</div>
        <div class="n">${esc(p.name)}</div>
        <div class="row"><span class="p grow">${money(p.price)}${UNITS[p.unit] ? `<span class="mut"> /${UNITS[p.unit]}</span>` : ''}</span><span class="mut">${p.stock <= 0 ? T('Rupture') : nq(p.stock)}</span></div></button>`).join('')}</div>`
@@ -740,18 +744,18 @@ function chooser(pid, how) {
 }
 function pick(pid, q, mode, how) { closeModal(); if (!(q > 0)) return; addToCart(pid, q, how, mode); if (view === 'vendre') VIEWS.vendre(); if (document.getElementById('scan')) refreshScanPanel(); }
 function pickCustom(pid, how) { const p = prod(pid), q = parseFloat(v('cqty').replace(',', '.')), a = +v('camt'); pick(pid, q > 0 ? q : (a > 0 ? Math.round(a / p.price * 1000) / 1000 : 0), 'u', how); }
-function cartTotal() { const s = cart.items.reduce((a, i) => a + Math.round(i.qty * i.price), 0); return { sub: s, total: Math.max(0, s - (cart.discount || 0)), n: cart.items.reduce((a, i) => a + i.qty, 0) }; }
+function cartTotal() { const s = cart.items.reduce((a, i) => a + Math.round(i.qty * i.price), 0); return { sub: s, total: cart.ret ? s - (cart.discount || 0) : Math.max(0, s - (cart.discount || 0)), n: cart.items.reduce((a, i) => a + Math.abs(i.qty), 0) }; }
 function drawCartBar() {
   const el = document.getElementById('cartbar'); if (!el) return;
   const t = cartTotal();
-  el.innerHTML = t.n ? `<div class="cartbar"><button class="btn xl" onclick="openCart()"><span class="row">${ic('cart')} ${cart.items.length} ligne${cart.items.length > 1 ? 's' : ''}</span><span>${money(t.total)} ›</span></button></div>` : '';
+  el.innerHTML = cart.items.length ? `<div class="cartbar"><button class="btn xl" ${cart.ret ? 'style="background:#7c3aed"' : ''} onclick="openCart()"><span class="row">${ic('cart')} ${cart.ret ? 'Échange · ' : ''}${cart.items.length} ligne${cart.items.length > 1 ? 's' : ''}</span><span>${t.total < 0 ? 'À rendre ' + money(-t.total) : money(t.total)} ›</span></button></div>` : '';
 }
 function linePrice(p, mode) { return mode === 'pack' ? p.pack.price : (cart.gros && F('gros') && p.wholesale ? p.wholesale : p.price); }
 function addToCart(pid, qty, how, mode = 'u') {
   const p = prod(pid); if (!p) return;
   if (mode === 'pack' && (!p.pack || !F('carton'))) mode = 'u';
   const mult = mode === 'pack' ? p.pack.qty : 1;
-  const it = cart.items.find(i => i.pid === pid && i.mode === mode);
+  const it = cart.items.find(i => i.pid === pid && i.mode === mode && !i.ret);
   const need = cart.items.filter(i => i.pid === pid).reduce((a, i) => a + i.qty * i.mult, 0) + qty * mult;
   if (need > p.stock) toast(`Attention : stock affiché ${nq(p.stock)} pour ${p.name}`);
   if (it) { it.qty = Math.round((it.qty + qty) * 1000) / 1000; it[how] = (it[how] || 0) + qty; }
@@ -784,12 +788,13 @@ function openCart() {
   const t = cartTotal();
   say('Total à payer', t.total);
   modal(T('Encaisser'), `
-    <div class="card list" style="padding:4px 16px">${cart.items.map((i, k) => `<div class="it"><div class="grow"><b>${esc(i.name)}</b><div class="mut">${money(i.price)}${i.unit ? ' / ' + i.unit : ''}${i.price < i.basePrice ? (i.nego ? ' · <span class="pill">négocié</span>' : ' · <span class="pill warn">prix baissé</span>') : ''} · <b style="color:var(--ink)">${money(Math.round(i.qty * i.price))}</b></div></div>
+    ${cart.ret ? `<div class="card row" style="background:#f1ebff"><div class="ico" style="background:#7c3aed;color:#fff">${ic('history')}</div><div class="grow"><b>Retour sur la vente n°${cart.ret.no}</b><div class="mut">${cart.items.some(i => !i.ret) ? 'Échange : articles rendus et nouveaux articles' : 'Ajoutez d\'autres articles pour un échange, ou validez pour rembourser'}</div></div></div>` : ''}
+    <div class="card list" style="padding:4px 16px">${cart.items.map((i, k) => i.ret ? `<div class="it"><div class="grow"><b>${esc(i.name)}</b><div class="mut"><span class="pill" style="background:#f1ebff;color:#7c3aed">rendu</span> · <b style="color:var(--ink)">${money(Math.round(i.qty * i.price))}</b></div></div><div class="qty"><span>${nq(-i.qty)}</span></div></div>` : `<div class="it"><div class="grow"><b>${esc(i.name)}</b><div class="mut">${money(i.price)}${i.unit ? ' / ' + i.unit : ''}${i.price < i.basePrice ? (i.nego ? ' · <span class="pill">négocié</span>' : ' · <span class="pill warn">prix baissé</span>') : ''} · <b style="color:var(--ink)">${money(Math.round(i.qty * i.price))}</b></div></div>
        <div class="qty"><button onclick="cartQty(${k},-1)">${ic('minus', 's')}</button><span>${qtyTxt(i)}</span><button onclick="cartQty(${k},1)">${ic('plus', 's')}</button></div></div>`).join('')}</div>
     ${F('gros') && cart.items.some(i => i.mode === 'u' && prod(i.pid)?.wholesale) ? `<label class="card row" style="padding:12px 16px;cursor:pointer"><span class="grow"><b>${T('Client grossiste')}</b><div class="mut">Applique les prix de gros fixés par le patron</div></span><span class="sw"><input type="checkbox" ${cart.gros ? 'checked' : ''} onchange="setGros(this.checked)"><span></span></span></label>` : ''}
     <div class="row" style="gap:8px">${F('nego') || isOwner() ? `<button class="btn ghost sm grow" onclick="askPrice()">${ic('hand', 's')} ${T('Négocier un prix')}</button>` : ''}${F('remise') ? `<button class="btn ghost sm grow" onclick="askDiscount()">${ic('tag', 's')} ${cart.discount ? T('Remise') + ' : ' + money(cart.discount) : T('Remise')}</button>` : ''}</div>
-    <div class="card" style="margin-top:12px"><div class="row"><span class="grow mut" style="font-size:15px">${T('Total à payer')}</span><b style="font-size:28px;letter-spacing:-.02em" class="num">${money(t.total)}</b></div></div>
-    <div class="seg" id="paySeg">${Object.entries(PAY).filter(([k]) => k === 'cash' || F(k)).map(([k, l]) => `<button data-k="${k}" onclick="setPay('${k}')">${ic(PAYI[k], 's')}${T(l)}</button>`).join('')}</div>
+    <div class="card" style="margin-top:12px"><div class="row"><span class="grow mut" style="font-size:15px">${t.total < 0 ? 'À rendre au client' : T('Total à payer')}</span><b style="font-size:28px;letter-spacing:-.02em;${t.total < 0 ? 'color:#7c3aed' : ''}" class="num">${money(Math.abs(t.total))}</b></div></div>
+    <div class="seg" id="paySeg">${Object.entries(PAY).filter(([k]) => (k === 'cash' || F(k)) && !(t.total < 0 && k === 'credit')).map(([k, l]) => `<button data-k="${k}" onclick="setPay('${k}')">${ic(PAYI[k], 's')}${T(l)}</button>`).join('')}</div>
     <div id="payExtra"></div>
     <div class="g2" style="margin-top:16px"><button class="btn soft" onclick="viderPanier()">${T('Vider')}</button><button class="btn ok xl" onclick="checkout()">${ic('check')} ${T('Valider')}</button></div>`,
     () => drawCartBar());
@@ -799,6 +804,7 @@ function setPay(k) {
   payMode = k;
   document.querySelectorAll('#paySeg button').forEach(b => b.classList.toggle('on', b.dataset.k === k));
   const x = document.getElementById('payExtra'), t = cartTotal();
+  if (k === 'cash' && t.total <= 0 && cart.ret) { x.innerHTML = t.total < 0 ? `<div class="card row" style="margin-top:12px;background:#f1ebff"><div class="grow">Rendez <b>${money(-t.total)}</b> au client, pris dans la caisse.</div></div>` : ''; return; }
   if (k === 'cash') x.innerHTML = `<label class="f">${T('Le client donne')}</label><input id="given" inputmode="numeric" placeholder="Montant reçu (facultatif)" oninput="updChange()">
     <div class="row wrap" style="gap:6px;margin-top:8px">${[...new Set([t.total, Math.ceil(t.total / 1000) * 1000, Math.ceil(t.total / 5000) * 5000, Math.ceil(t.total / 10000) * 10000])].filter(n => n > 0).slice(0, 4).map(n => `<button class="chip" onclick="document.getElementById('given').value=${n};updChange()">${nf(n)}</button>`).join('')}</div>
     <div id="change" style="margin-top:10px;font-size:16px"></div>`;
@@ -870,6 +876,7 @@ function saleFlags(s) {
   const man = s.items.filter(i => i.manuel > 0).length;
   if (s.user !== 'owner' && man) f.push(['warn', `${man} saisi${man > 1 ? 's' : ''} à la main`]);
   if (s.discount) f.push(['warn', `Remise ${nf(s.discount)}`]);
+  if (s.retOf) f.push(['warn', `Retour vente n°${s.retOf}`]);
   if (s.items.some(i => i.price < i.basePrice && !i.nego)) f.push(['warn', 'Prix baissé']);
   if (s.items.some(i => i.nego)) f.push(['', 'Négocié']);
   if (s.gros) f.push(['warn', 'Prix de gros']);
@@ -885,23 +892,25 @@ function saleFlags(s) {
 function checkout() {
   if (!cart.items.length) return;
   const t = cartTotal(), sh = openShift(me.id);
+  if (cart.ret && payMode === 'credit' && t.total < 0) return toast('Remboursez en espèces ou par Mobile Money');
   const sale = { id: uid(), no: Math.max(0, ...db.sales.map(x => x.no)) + 1, gros: !!cart.gros, date: now(), user: me.id, shift: sh ? sh.id : null, items: cart.items.map(i => ({ ...i })), sub: t.sub, discount: cart.discount || 0, total: t.total, pay: payMode, auth: cart.auth.slice(), cancelled: false, verified: isOwner() };
   if (payMode === 'momo') { sale.op = v('momoOp'); sale.ref = v('momoRef'); if (F('momoRef') && !sale.ref) return toast('Saisissez le n° de transaction Mobile Money'); }
   if (payMode === 'credit') { sale.client = v('cliName'); sale.tel = v('cliTel'); if (!sale.client) return toast('Indiquez le nom du client'); }
   if (payMode === 'cash') sale.given = +v('given') || 0;
   sale.items.forEach(i => { const p = prod(i.pid), q = i.qty * (i.mult || 1); if (p) { p.stock -= q; move(p.id, -q, 'vente', 'Vente n°' + sale.no); } });
+  if (cart.ret) { const o = db.sales.find(x => x.id === cart.ret.sid); sale.retOf = cart.ret.no; if (o) { o.retQ = o.retQ || {}; cart.ret.lines.forEach(l => o.retQ[l.k] = (o.retQ[l.k] || 0) + l.q); o.returned = true; } }
   db.sales.unshift(sale);
-  log('Vente', `n°${sale.no} — ${money(sale.total)} (${PAY[sale.pay]})`);
+  log(sale.retOf ? 'Retour / échange' : 'Vente', sale.retOf ? `n°${sale.no} sur la vente n°${sale.retOf} — ${sale.total < 0 ? 'remboursé ' + money(-sale.total) : 'payé ' + money(sale.total)} (${PAY[sale.pay]})` : `n°${sale.no} — ${money(sale.total)} (${PAY[sale.pay]})`);
   save(); cart = newCart(); closeModal(); if (view === 'vendre') VIEWS.vendre();
   showReceipt(sale, true);
   if (sale.pay === 'cash' && sale.given > sale.total) say('Monnaie à rendre', sale.given - sale.total);
   if (F('printer') && db.settings.printerAuto && PRN.ch) printReceipt(sale);
 }
 function receiptText(s) {
-  let t = `*${db.settings.shopName}*\n${db.settings.contact || ''}\nReçu n°${s.no} — ${fmtDate(s.date)}\n\n`;
+  let t = `*${db.settings.shopName}*\n${db.settings.contact || ''}${db.settings.ncc ? '\nNCC : ' + db.settings.ncc : ''}\nReçu n°${s.no} — ${fmtDate(s.date)}\n\n`;
   s.items.forEach(i => t += `${qtyTxt(i)} x ${i.name} : ${nf(i.qty * i.price)}\n`);
   if (s.discount) t += `Remise : -${nf(s.discount)}\n`;
-  return t + `\n*TOTAL : ${money(s.total)}*\nPaiement : ${PAY[s.pay]}${s.op ? ' (' + s.op + ')' : ''}\nVendeur : ${userName(s.user)}\nMerci de votre visite !`;
+  return t + `\n*TOTAL : ${money(s.total)}*\nPaiement : ${PAY[s.pay]}${s.op ? ' (' + s.op + ')' : ''}\nVendeur : ${userName(s.user)}${db.settings.receiptNote ? '\n' + db.settings.receiptNote : ''}\nMerci de votre visite !`;
 }
 function showReceipt(s, fresh) {
   const fl = saleFlags(s);
@@ -913,6 +922,8 @@ function showReceipt(s, fresh) {
       ${s.items.map(i => `<div class="row" style="padding:5px 0"><div class="grow">${qtyTxt(i)} × ${esc(i.name)}${!fresh && i.manuel && s.user !== 'owner' ? ` <span class="pill warn">sans scan</span>` : ''}</div><div class="num">${nf(i.qty * i.price)}</div></div>`).join('')}
       ${s.discount ? `<div class="row" style="padding:5px 0"><div class="grow">Remise</div><div>-${nf(s.discount)}</div></div>` : ''}
       <div class="row" style="border-top:1px dashed var(--line);margin-top:6px;padding-top:10px"><b class="grow">Total</b><b class="num">${money(s.total)}</b></div>
+      ${s.retOf ? `<div style="color:#7c3aed;font-weight:700;margin-top:6px">Retour / échange sur la vente n°${s.retOf}${s.total < 0 ? ' · remboursé ' + money(-s.total) : ''}</div>` : ''}
+      ${s.returned ? `<div style="color:#7c3aed;font-weight:700;margin-top:6px">Des articles de cette vente ont été rendus</div>` : ''}
       <div class="mut" style="margin-top:6px">${PAY[s.pay]}${s.op ? ' · ' + esc(s.op) : ''}${s.ref ? ' · réf ' + esc(s.ref) : ''}${s.client ? ' · ' + esc(s.client) : ''}</div>
       ${s.auth && s.auth.length ? `<div class="mut" style="margin-top:4px">Autorisé par le propriétaire : ${esc(s.auth.join(', '))}</div>` : ''}
       ${s.cancelled ? `<div style="color:var(--bad);font-weight:700;margin-top:8px">Annulée — ${esc(s.cancelReason || '')}</div>` : ''}
@@ -920,15 +931,65 @@ function showReceipt(s, fresh) {
       ${s.flag ? `<div style="color:var(--bad);font-weight:700;margin-top:8px">Signalée : ${esc(s.flag)}</div>` : ''}
     </div>
     <div class="g2">
-      <a class="btn ghost" target="_blank" href="https://wa.me/${(s.tel || '').replace(/\D/g, '')}?text=${encodeURIComponent(receiptText(s))}">${ic('send', 's')} WhatsApp</a>
+      <button class="btn ghost" onclick="shareReceipt('${s.id}')">${ic('send', 's')} Envoyer le reçu</button>
       ${fresh ? `<button class="btn" onclick="closeModal()">${T('Vente suivante')}</button>`
       : s.cancelled ? `<button class="btn soft" onclick="closeModal()">Fermer</button>`
       : isOwner() ? `<button class="btn bad" onclick="cancelSale('${s.id}')">Annuler la vente</button>`
       : s.cancelReq ? `<button class="btn soft" onclick="closeModal()">En attente</button>` : `<button class="btn soft" onclick="requestCancel('${s.id}')">Annuler…</button>`}
     </div>
+    ${!fresh && F('retours') && !s.cancelled && !s.retOf && s.items.some((i, k) => i.qty - ((s.retQ || {})[k] || 0) > 0) ? `<button class="btn ghost full" style="margin-top:10px;color:#7c3aed" onclick="returnSheet('${s.id}')">${ic('history', 's')} Retour ou échange</button>` : ''}
     ${F('printer') ? `<button class="btn ghost full" style="margin-top:10px" onclick="printReceipt(db.sales.find(x=>x.id==='${s.id}'))">${ic('print', 's')} Imprimer le reçu</button>` : ''}
     ${!fresh && isOwner() && !s.cancelled && s.pay === 'momo' && F('momoCheck') ? `<div class="g2" style="margin-top:10px"><button class="btn soft" onclick="setMomo('${s.id}',false)">MoMo pas reçu</button><button class="btn ok" onclick="setMomo('${s.id}',true)">${ic('check', 's')} MoMo reçu</button></div>` : ''}
     ${!fresh && isOwner() && !s.cancelled ? `<button class="btn ghost full" style="margin-top:10px" onclick="flagSale('${s.id}')">${ic('flag', 's')} ${s.flag ? 'Retirer le signalement' : 'Signaler cette vente'}</button>` : ''}`);
+}
+function returnSheet(id) {
+  const s = db.sales.find(x => x.id === id); window._ret = {}; window._retSid = id;
+  const left = (i, k) => Math.round((i.qty - ((s.retQ || {})[k] || 0)) * 1000) / 1000;
+  modal('Retour ou échange', `<div class="mut" style="margin-bottom:10px">Vente n°${s.no} du ${fmtDate(s.date)} · ${money(s.total)}. Choisissez ce que le client rapporte : l'article revient dans le stock.</div>
+    <div class="card list" style="padding:4px 16px">${s.items.map((i, k) => left(i, k) > 0 ? `<div class="it"><div class="grow"><b>${esc(i.name)}</b><div class="mut">${money(i.price)} · acheté ${qtyTxt(i)}${(s.retQ || {})[k] ? ' · déjà rendu ' + nq(s.retQ[k]) : ''}</div></div>
+      <div class="qty"><button onclick="retQty(${k},-1,${left(i, k)})">${ic('minus', 's')}</button><span id="rq${k}">0</span><button onclick="retQty(${k},1,${left(i, k)})">${ic('plus', 's')}</button></div></div>` : '').join('')}</div>
+    <div class="card row" style="margin-top:10px"><span class="grow mut">Valeur rendue</span><b id="rtot" class="num" style="font-size:22px">${money(0)}</b></div>
+    ${isOwner() ? '' : '<div class="mut" style="margin:6px 0 10px">Le code du propriétaire sera demandé.</div>'}
+    <div class="g2"><button class="btn ghost" onclick="doReturn('${id}',false)">Rembourser</button><button class="btn" style="background:#7c3aed;color:#fff" onclick="doReturn('${id}',true)">Échanger</button></div>`);
+}
+function retQty(k, d, max) {
+  const s = db.sales.find(x => x.id === window._retSid), i = s.items[k];
+  const step = i.mode === 'u' && isDec(prod(i.pid) || {}) ? .25 : 1;
+  window._ret[k] = Math.min(max, Math.max(0, Math.round(((window._ret[k] || 0) + d * step) * 1000) / 1000));
+  document.getElementById('rq' + k).textContent = nq(window._ret[k]);
+  document.getElementById('rtot').textContent = money(Object.entries(window._ret).reduce((a, [kk, q]) => a + Math.round(q * s.items[kk].price), 0));
+}
+async function doReturn(id, exchange) {
+  const s = db.sales.find(x => x.id === id), lines = Object.entries(window._ret || {}).filter(([, q]) => q > 0).map(([k, q]) => ({ k: +k, q }));
+  if (!lines.length) return toast('Choisissez au moins un article rendu');
+  const val = lines.reduce((a, l) => a + Math.round(l.q * s.items[l.k].price), 0);
+  if (!isOwner() && !(await ownerAuth(`${exchange ? 'Échange' : 'Remboursement'} sur la vente n°${s.no} (${money(val)})`))) return;
+  if (cart.items.length && !(await ask('Le panier en cours sera remplacé.', { ok: 'Continuer', danger: true }))) return;
+  cart = newCart(); cart.ret = { sid: s.id, no: s.no, lines }; if (!isOwner()) cart.auth.push(`Retour vente n°${s.no}`);
+  lines.forEach(l => { const i = s.items[l.k]; cart.items.push({ ...i, name: i.name, qty: -l.q, scan: 0, manuel: 0, ret: true }); });
+  closeModal();
+  if (exchange) { view = 'vendre'; render(); toast('Ajoutez les nouveaux articles, puis encaissez la différence'); }
+  else { payMode = 'cash'; openCart(); }
+}
+function shareReceipt(id) {
+  const s = db.sales.find(x => x.id === id), tel = (s.tel || '').replace(/[^\d+]/g, '');
+  modal('Envoyer le reçu', `<label class="f" style="margin-top:0">Téléphone du client (facultatif)</label><input id="rtel" inputmode="tel" value="${esc(tel)}" placeholder="Ex : 07 00 00 00 00">
+    <label class="f">E-mail du client (facultatif)</label><input id="rmail" inputmode="email" value="${esc(s.mail || '')}" placeholder="client@exemple.com">
+    <div class="g3" style="margin-top:14px">
+      <button class="btn" style="background:#16a34a;color:#fff" onclick="sendReceipt('${id}','wa')">WhatsApp</button>
+      <button class="btn ghost" onclick="sendReceipt('${id}','sms')">SMS</button>
+      <button class="btn ghost" onclick="sendReceipt('${id}','mail')">E-mail</button></div>
+    <div class="mut" style="margin-top:10px">Le message s'ouvre dans l'application du téléphone, prêt à envoyer.</div>`);
+}
+function sendReceipt(id, how) {
+  const s = db.sales.find(x => x.id === id), txt = how === 'wa' ? receiptText(s) : receiptText(s).replace(/\*/g, ''), raw = v('rtel').replace(/[^\d+]/g, ''), mail = v('rmail').trim();
+  const intl = raw.replace(/^\+/, '').replace(/^00/, ''), wa = intl.length === 10 && /^0/.test(intl) ? '225' + intl : intl;
+  if (raw) s.tel = raw; if (mail) s.mail = mail; save();
+  const url = how === 'wa' ? `https://wa.me/${wa}?text=${encodeURIComponent(txt)}`
+    : how === 'sms' ? `sms:${raw}?&body=${encodeURIComponent(txt)}`
+    : `mailto:${encodeURIComponent(mail)}?subject=${encodeURIComponent(`Reçu n°${s.no} — ${db.settings.shopName}`)}&body=${encodeURIComponent(txt)}`;
+  log('Reçu envoyé', `n°${s.no} par ${how === 'wa' ? 'WhatsApp' : how === 'sms' ? 'SMS' : 'e-mail'}`);
+  const a = document.createElement('a'); a.href = url; if (how === 'wa') { a.target = '_blank'; a.rel = 'noopener'; } document.body.appendChild(a); a.click(); a.remove();
 }
 async function requestCancel(id) {
   const s = db.sales.find(x => x.id === id);
@@ -1110,6 +1171,7 @@ VIEWS.home = function () {
       <div class="row2"><div>Marge<b class="num">${nf(ca - cost)}</b></div><div>Dépenses<b class="num">${nf(dep)}</b></div><div>Bénéfice net<b class="num" style="color:${ca - cost - dep >= 0 ? '#5ee39a' : '#ff8a80'}">${nf(ca - cost - dep)}</b></div><div>Ventes<b class="num">${sales.length}</b></div></div></div>
     ${subBanner()}
     <a class="btn ok full" style="margin-bottom:12px" target="_blank" href="${waLink(db.settings.ownerPhone, dayReport())}">${ic('send', 's')} Bilan du jour sur WhatsApp</a>
+    ${(n => n ? `<div class="card row tap" style="cursor:pointer" onclick="ui.stockFilter='exp';go('stock')"><div class="ico warn">${ic('clock')}</div><div class="grow"><b>${n} produit(s) à vendre vite</b><div class="mut">Date de péremption dans moins de ${EXP_DAYS} jours, ou dépassée</div></div>${ic('chev', 's')}</div>` : '')(db.products.filter(p => p.active && expSoon(p)).length)}
     ${pc ? `<button class="card row" style="width:100%;border:0;cursor:pointer;text-align:left;background:var(--accl)" onclick="go('controle')"><div class="ico acc">${ic('shield')}</div><div class="grow"><b>${pc} élément${pc > 1 ? 's' : ''} à contrôler</b><div class="mut">Postes fermés, annulations, comptages</div></div>${ic('chev', 's')}</button>` : ''}
     <div class="g3"><div class="kpi"><div class="k">Espèces</div><div class="kv num">${nf(byPay.cash)}</div></div><div class="kpi"><div class="k">Mobile Money</div><div class="kv num">${nf(byPay.momo)}</div></div><div class="kpi"><div class="k">À crédit</div><div class="kv num">${nf(byPay.credit)}</div></div></div>
     ${staff.length ? `<h3>Vos vendeurs · 30 derniers jours</h3><div class="card list" style="padding:4px 16px">${staff.map(e => { const r = empRisk(e.id), sh = openShift(e.id); return `<div class="it tap" onclick="empProfile('${e.id}')"><div class="av e">${esc(e.name[0].toUpperCase())}</div>
@@ -1165,6 +1227,8 @@ VIEWS.stock = function () {
   const q = ui.stockQ.toLowerCase();
   let list = db.products.filter(p => p.active && (!q || p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q)));
   if (ui.stockFilter === 'bas') list = list.filter(p => p.stock <= p.min);
+  if (ui.stockFilter === 'exp') list = list.filter(p => expSoon(p));
+  if (F('variantes') && ui.stockFilter !== 'bas') { const seen = new Set(); list = list.filter(p => { if (!p.model) return true; if (seen.has(p.model)) return false; seen.add(p.model); return true; }); }
   const act = db.products.filter(p => p.active), low = act.filter(p => p.stock <= p.min).length;
   const canRecv = isOwner() || db.settings.empCanReceive;
   main().innerHTML = `<h1>Stock</h1>
@@ -1173,16 +1237,26 @@ VIEWS.stock = function () {
       <button class="btn acc" onclick="startCount()">${ic('scan', 's')} Recenser</button>
       <button class="btn ghost" onclick="labelsPicker()">${ic('tag', 's')} Étiquettes</button>
       ${canRecv ? `<button class="btn ghost" onclick="receiveStock()">${ic('inbox', 's')} Réception</button>` : ''}
-      ${isOwner() ? `<button class="btn" onclick="editProduct()">${ic('plus', 's')} Produit</button>` : ''}</div>
+      ${isOwner() ? `<button class="btn" onclick="editProduct()">${ic('plus', 's')} Produit</button>` : ''}${isOwner() && F('variantes') ? `<button class="btn ghost" onclick="editModel()">${ic('grid', 's')} Modèle tailles / couleurs</button>` : ''}</div>
     <div class="search">${ic('search', 's')}<input id="sq" placeholder="Chercher" value="${esc(ui.stockQ)}"></div>
-    <div class="chips"><button class="chip ${ui.stockFilter !== 'bas' ? 'on' : ''}" onclick="ui.stockFilter='tout';VIEWS.stock()">Tous</button><button class="chip ${ui.stockFilter === 'bas' ? 'on' : ''}" onclick="ui.stockFilter='bas';VIEWS.stock()">Stock bas · ${low}</button></div>
-    <div class="card list" style="padding:4px 16px">${list.length ? list.map(p => `<div class="it ${isOwner() ? 'tap' : ''}" ${isOwner() ? `onclick="editProduct('${p.id}')"` : ''}>
+    <div class="chips"><button class="chip ${ui.stockFilter !== 'bas' ? 'on' : ''}" onclick="ui.stockFilter='tout';VIEWS.stock()">Tous</button><button class="chip ${ui.stockFilter === 'bas' ? 'on' : ''}" onclick="ui.stockFilter='bas';VIEWS.stock()">Stock bas · ${low}</button>${F('peremption') ? `<button class="chip ${ui.stockFilter === 'exp' ? 'on' : ''}" onclick="ui.stockFilter='exp';VIEWS.stock()">À vendre vite · ${act.filter(expSoon).length}</button>` : ''}</div>
+    <div class="card list" style="padding:4px 16px">${list.length ? list.map(p => isVar(p) && ui.stockFilter !== 'bas' ? modelRow(p) : `<div class="it ${isOwner() ? 'tap' : ''}" ${isOwner() ? `onclick="editProduct('${p.id}')"` : ''}>
         <div class="ico" style="background:${hue(p.name)} ${p.photo ? `url(${p.photo}) center/cover` : ''};color:#fff;font-weight:800">${p.photo ? '' : esc(p.name[0].toUpperCase())}</div>
         <div class="grow"><b>${esc(p.name)}</b><div class="mut">${p.code} · ${money(p.price)}${UNITS[p.unit] ? '/' + UNITS[p.unit] : ''}${p.pack ? ' · ' + esc(p.pack.name) + ' ' + nf(p.pack.price) : ''}${isOwner() ? ' · achat ' + nq(p.cost) : ''}</div></div>
-        <div class="r"><b style="font-size:18px" class="num">${nq(p.stock)}</b>${p.pack && p.stock >= p.pack.qty ? `<div class="mut">${Math.floor(p.stock / p.pack.qty)} ${esc(p.pack.name.toLowerCase())}</div>` : ''}<div>${p.stock <= 0 ? '<span class="pill bad">Rupture</span>' : p.stock <= p.min ? '<span class="pill warn">Bas</span>' : ''}</div></div></div>`).join('') : emptyBox('box', 'Aucun produit')}</div>`;
+        <div class="r"><b style="font-size:18px" class="num">${nq(p.stock)}</b>${p.pack && p.stock >= p.pack.qty ? `<div class="mut">${Math.floor(p.stock / p.pack.qty)} ${esc(p.pack.name.toLowerCase())}</div>` : ''}<div>${p.stock <= 0 ? '<span class="pill bad">Rupture</span>' : p.stock <= p.min ? '<span class="pill warn">Bas</span>' : ''}${expPill(p)}</div></div></div>`).join('') : emptyBox('box', 'Aucun produit')}</div>`;
   const inp = document.getElementById('sq');
   inp.addEventListener('input', () => { ui.stockQ = inp.value; const pos = inp.selectionStart; VIEWS.stock(); const n = document.getElementById('sq'); n.focus(); n.setSelectionRange(pos, pos); });
 };
+const EXP_DAYS = 30;
+const daysTo = d => { const t0 = new Date(); t0.setHours(0, 0, 0, 0); return Math.round((new Date(d + 'T00:00:00').getTime() - t0.getTime()) / 864e5); };
+const expSoon = p => F('peremption') && p.exp && p.stock > 0 && daysTo(p.exp) <= EXP_DAYS;
+function expPill(p) { if (!expSoon(p)) return ''; const d = daysTo(p.exp); return d < 0 ? ' <span class="pill bad">Périmé</span>' : ` <span class="pill warn">${d === 0 ? 'Périme aujourd\'hui' : 'Périme dans ' + d + ' j'}</span>`; }
+function modelRow(p) {
+  const vs = modelVars(p.model), tot = vs.reduce((a, x) => a + x.stock, 0), out = vs.filter(x => x.stock <= 0).length;
+  return `<div class="it tap" onclick="modelSheet('${p.model}')"><div class="ico" style="background:${hue(p.mName)};color:#fff;font-weight:800">${esc((p.mName || '?')[0].toUpperCase())}</div>
+    <div class="grow"><b>${esc(p.mName)}</b><div class="mut">${vs.length} variante(s) · ${money(p.price)}${isOwner() ? ' · achat ' + nq(p.cost) : ''}</div></div>
+    <div class="r"><b style="font-size:18px" class="num">${nq(tot)}</b><div>${out ? `<span class="pill ${out === vs.length ? 'bad' : 'warn'}">${out} en rupture</span>` : ''}</div></div></div>`;
+}
 function editProduct(id) {
   const p = id ? prod(id) : null, cats = [...new Set(db.products.map(x => x.cat))];
   window._photo = undefined;
@@ -1201,9 +1275,72 @@ function editProduct(id) {
         <div class="g2" style="margin-top:6px"><div ${F('gros') ? '' : 'hidden'}><label class="f">Prix de gros (unité)</label><input id="pgr" inputmode="numeric" value="${p?.wholesale || ''}" placeholder="Facultatif"></div><div ${F('nego') ? '' : 'hidden'}><label class="f">Prix minimum négociable</label><input id="pmn" inputmode="numeric" value="${p?.minPrice || ''}" placeholder="Facultatif"></div></div>
         <div class="mut" style="margin-top:6px">Le vendeur peut négocier jusqu'au prix minimum sans votre code.</div>
       </div></details>
+    ${F('peremption') ? `<label class="f">Date de péremption (la plus proche)</label><input id="pex" type="date" value="${esc(p?.exp || '')}">` : ''}
     <label class="f">Code-barres du fabricant (facultatif)</label><div class="row"><input id="pbc" class="grow" value="${esc(p?.barcode)}" placeholder="Scannez ou tapez"><button class="btn acc sm" style="min-height:50px" onclick="scanBarcodeInto()">${ic('scan', 's')}</button></div>
     <button class="btn full xl" style="margin-top:16px" onclick="saveProduct('${p?.id || ''}')">Enregistrer</button>
     ${p ? `<div class="g2" style="margin-top:10px"><button class="btn ghost sm" onclick="adjustStock('${p.id}')">± Corriger le stock</button><button class="btn ghost sm" onclick="labelsFor('${p.id}')">${ic('tag', 's')} Étiquettes</button><button class="btn ghost sm" onclick="productHistory('${p.id}')">${ic('history', 's')} Historique</button><button class="btn ghost sm" style="color:var(--bad)" onclick="archiveProduct('${p.id}')">${ic('trash', 's')} Supprimer</button></div>` : ''}`);
+}
+/* Tailles et couleurs : chaque variante est un produit (stock, code, étiquettes), relié à son modèle */
+const isVar = p => F('variantes') && p && p.model;
+const varLabel = p => [p.color, p.size].filter(Boolean).join(' · ');
+const modelVars = mid => db.products.filter(p => p.active && p.model === mid);
+const SIZE_SETS = [['Vêtements', 'XS, S, M, L, XL, XXL'], ['Pantalons', '36, 38, 40, 42, 44, 46'], ['Chaussures', '38, 39, 40, 41, 42, 43, 44, 45'], ['Enfants', '2 ans, 4 ans, 6 ans, 8 ans, 10 ans, 12 ans'], ['Taille unique', 'Unique']];
+const splitList = x => [...new Set(String(x || '').split(/[,;\n]/).map(t => t.trim()).filter(Boolean))].slice(0, 20);
+function editModel(mid) {
+  const vs = mid ? modelVars(mid) : [], f = vs[0], cats = [...new Set(db.products.map(x => x.cat))];
+  ui.mdl = { mid: mid || '', sizes: [...new Set(vs.map(p => p.size).filter(Boolean))], colors: [...new Set(vs.map(p => p.color).filter(Boolean))] };
+  modal(mid ? esc(f.mName) : 'Nouveau modèle', `
+    <div class="card row" style="margin-bottom:6px"><div class="ico acc">${ic('tag')}</div><div class="grow mut">Un modèle (ex. « Jean slim ») décliné en tailles et couleurs. Chaque variante a son stock et ses étiquettes : la vendeuse scanne, Boutik sait que c'est le bleu en 40.</div></div>
+    <label class="f">Nom du modèle</label><input id="mn" value="${esc(f?.mName || '')}" placeholder="Ex : Jean slim, Basket Air, Pagne wax">
+    <label class="f">Catégorie</label><input id="mc" list="catm" value="${esc(f?.cat || '')}" placeholder="Ex : Vêtements"><datalist id="catm">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist>
+    <div class="g2"><div><label class="f">Prix d'achat</label><input id="mco" inputmode="decimal" value="${f ? f.cost : ''}"></div><div><label class="f">Prix de vente</label><input id="mpr" inputmode="numeric" value="${f ? f.price : ''}"></div></div>
+    <label class="f">Tailles (séparées par des virgules)</label><input id="ms" value="${esc(ui.mdl.sizes.join(', '))}" placeholder="Ex : S, M, L, XL">
+    <div class="chips">${SIZE_SETS.map(([l, x]) => `<button class="chip" onclick="document.getElementById('ms').value='${x}';mdlGrid()">${l}</button>`).join('')}</div>
+    <label class="f">Couleurs (séparées par des virgules, facultatif)</label><input id="mcl" value="${esc(ui.mdl.colors.join(', '))}" placeholder="Ex : Noir, Bleu, Blanc">
+    <button class="btn ghost full" style="margin-top:12px" onclick="mdlGrid()">${ic('grid', 's')} Préparer la grille des stocks</button>
+    <div id="mgrid"></div>
+    <button class="btn full xl" style="margin-top:14px" onclick="saveModel()">Enregistrer le modèle</button>`);
+  if (mid) mdlGrid();
+}
+function mdlGrid() {
+  const sizes = splitList(v('ms')), colors = splitList(v('mcl')), cs = colors.length ? colors : [''], mid = ui.mdl.mid;
+  const ex = (c, z) => mid && db.products.find(p => p.active && p.model === mid && (p.color || '') === c && (p.size || '') === z);
+  if (!sizes.length) { document.getElementById('mgrid').innerHTML = '<div class="mut" style="margin-top:10px">Indiquez au moins une taille.</div>'; return; }
+  document.getElementById('mgrid').innerHTML = `<div class="mut" style="margin:12px 0 6px">${mid ? 'Stock des nouvelles variantes (les existantes se corrigent par le recensement)' : 'Stock de départ de chaque variante'} · ${sizes.length * cs.length} variante(s)</div>
+    <div style="overflow-x:auto"><table class="t vgrid"><tr><th></th>${sizes.map(z => `<th class="n">${esc(z)}</th>`).join('')}</tr>
+    ${cs.map((c, ci) => `<tr><td><b>${esc(c || 'Stock')}</b></td>${sizes.map((z, zi) => { const e = ex(c, z); return `<td class="n">${e ? `<span class="pill">${nq(e.stock)}</span>` : `<input class="mq" data-c="${ci}" data-z="${zi}" inputmode="numeric" placeholder="0" style="width:58px;min-height:40px;padding:6px;text-align:center">`}</td>`; }).join('')}</tr>`).join('')}</table></div>`;
+}
+function saveModel() {
+  const name = v('mn').trim(); if (!name) return toast('Le nom du modèle est obligatoire');
+  const sizes = splitList(v('ms')), colors = splitList(v('mcl')), cs = colors.length ? colors : [''];
+  if (!sizes.length) return toast('Indiquez au moins une taille');
+  if (!document.querySelector('.vgrid')) mdlGrid();
+  const num = x => parseFloat(String(x).replace(',', '.')) || 0, cost = num(v('mco')), price = +v('mpr') || 0, cat = v('mc') || 'Vêtements';
+  if (!price) return toast('Indiquez le prix de vente');
+  const mid = ui.mdl.mid || uid(); let made = 0;
+  modelVars(mid).forEach(p => { Object.assign(p, { mName: name, cat, cost, price }); p.name = `${name} — ${varLabel(p)}`; });
+  cs.forEach((c, ci) => sizes.forEach((z, zi) => {
+    if (db.products.some(p => p.active && p.model === mid && (p.color || '') === c && (p.size || '') === z)) return;
+    const q = Math.max(0, num(document.querySelector(`.mq[data-c="${ci}"][data-z="${zi}"]`)?.value));
+    const p = newProduct({ name: `${name} — ${[c, z].filter(Boolean).join(' · ')}`, cat, cost, price, stock: q, min: 1 }); Object.assign(p, { model: mid, mName: name, color: c, size: z });
+    db.products.push(p); if (q) move(p.id, q, 'entrée', 'Stock initial'); made++;
+  }));
+  log(ui.mdl.mid ? 'Modèle modifié' : 'Modèle créé', `${name} — ${made} nouvelle(s) variante(s)`); save(); closeModal(); render(); toast(made ? `${made} variante(s) créée(s)` : 'Modèle enregistré');
+}
+function modelSheet(mid) {
+  const vs = modelVars(mid); if (!vs.length) return; const f = vs[0];
+  const sizes = [...new Set(vs.map(p => p.size))], colors = [...new Set(vs.map(p => p.color))];
+  const cell = (c, z) => vs.find(p => (p.color || '') === c && (p.size || '') === z);
+  modal(esc(f.mName), `<div class="mut" style="margin-bottom:10px">${esc(f.cat)} · ${money(f.price)}${isOwner() ? ' · achat ' + nq(f.cost) : ''} · ${vs.length} variante(s) · ${nq(vs.reduce((a, p) => a + p.stock, 0))} en stock</div>
+    <div class="card" style="overflow-x:auto;padding:10px"><table class="t"><tr><th></th>${sizes.map(z => `<th class="n">${esc(z)}</th>`).join('')}</tr>
+    ${colors.map(c => `<tr><td><b>${esc(c || 'Stock')}</b></td>${sizes.map(z => { const p = cell(c, z); return `<td class="n">${p ? `<button class="chip ${p.stock <= 0 ? '' : 'on'}" style="min-width:48px;justify-content:center;${p.stock <= 0 ? 'opacity:.55' : ''}" ${isOwner() ? `onclick="editProduct('${p.id}')"` : ''}>${nq(p.stock)}</button>` : '—'}</td>`; }).join('')}</tr>`).join('')}</table></div>
+    ${isOwner() ? `<div class="g2"><button class="btn" onclick="closeModal();editModel('${mid}')">${ic('plus', 's')} Tailles, couleurs, prix</button><button class="btn ghost" onclick="closeModal();labelsPicker(${JSON.stringify(vs.map(p => p.id)).replace(/"/g, '&quot;')})">${ic('tag', 's')} Étiquettes</button></div>` : ''}`);
+}
+function pickVariant(mid) {
+  const vs = modelVars(mid); if (!vs.length) return; const f = vs[0];
+  const sizes = [...new Set(vs.map(p => p.size))], colors = [...new Set(vs.map(p => p.color))];
+  modal(esc(f.mName), `<div class="mut" style="margin-bottom:10px">${money(f.price)} · touchez la taille et la couleur</div>
+    ${colors.map(c => `${c ? `<h3 style="margin:12px 4px 8px">${esc(c)}</h3>` : ''}<div class="g3">${sizes.map(z => { const p = vs.find(x => (x.color || '') === c && (x.size || '') === z); return p ? `<button class="btn ${p.stock > 0 ? 'ghost' : 'soft'} col" style="${p.stock > 0 ? '' : 'opacity:.5'}" onclick="closeModal();addToCart('${p.id}',1,'manuel');VIEWS.vendre()"><b style="font-size:18px">${esc(z)}</b><small>${p.stock > 0 ? nq(p.stock) + ' en stock' : T('Rupture')}</small></button>` : ''; }).join('')}</div>`).join('')}`);
 }
 function setPhoto(inp) {
   const f = inp.files && inp.files[0]; if (!f) return;
@@ -1217,6 +1354,7 @@ function saveProduct(id) {
   const data = { name, cat: v('pc') || 'Divers', cost: num(v('pco')), price: +v('ppr') || 0, min: +v('pmi') || 0, barcode: v('pbc'), unit: document.querySelector('#punit .on')?.dataset.u || 'pièce', wholesale: +v('pgr') || 0, minPrice: +v('pmn') || 0,
     pack: num(v('pkq')) > 0 && +v('pkp') > 0 ? { name: v('pkn') || 'Carton', qty: num(v('pkq')), price: +v('pkp') } : null };
   if (window._photo !== undefined) data.photo = window._photo;
+  if (document.getElementById('pex')) data.exp = v('pex');
   if (data.minPrice && data.minPrice > data.price) return toast('Le prix minimum doit être inférieur au prix de vente');
   if (data.barcode && db.products.some(x => x.barcode === data.barcode && x.id !== id && x.active)) return toast('Ce code-barres est déjà utilisé');
   if (id) { const p = prod(id), old = p.price; Object.assign(p, data); log('Produit modifié', name + (old !== p.price ? ` — prix ${nf(old)} → ${nf(p.price)}` : '')); }
@@ -1414,6 +1552,7 @@ VIEWS.reglages = function () {
     <div class="card"><label class="f" style="margin-top:0">Nom de la boutique</label><input id="gs" value="${esc(s.shopName)}"><label class="f">Votre prénom</label><input id="go" value="${esc(s.ownerName)}">
       <label class="f">Votre WhatsApp (bilans)</label><input id="gw" inputmode="tel" value="${esc(s.ownerPhone || '')}" placeholder="Ex : 225 07 00 00 00 00">
       <label class="f">Adresse / téléphone (reçus)</label><input id="gt" value="${esc(s.contact)}">
+      <div class="g2"><div><label class="f">N° contribuable (NCC)</label><input id="gncc" value="${esc(s.ncc || '')}" placeholder="Facultatif"></div><div><label class="f">Mention en bas du reçu</label><input id="gnote" value="${esc(s.receiptNote || '')}" placeholder="Ex : échange sous 7 jours"></div></div>
       <div class="g2"><div><label class="f">Monnaie</label><input id="gc" value="${esc(s.currency)}"></div><div><label class="f">Alerte stock bas</label><input id="gl" inputmode="numeric" value="${s.lowDefault}"></div></div>
       <label class="f">Nouveau code secret (vide = inchangé)</label><input id="gp" inputmode="numeric" maxlength="4">
       <button class="btn full" style="margin-top:14px" onclick="saveSettings()">Enregistrer</button></div>
@@ -1427,15 +1566,34 @@ VIEWS.reglages = function () {
     <h3>Sauvegarde & export</h3>
     <div class="card"><p class="mut" style="margin-top:0">Les données sont sur cet appareil. Sauvegardez chaque semaine (WhatsApp, e-mail, clé USB).</p>
       <div class="g2"><button class="btn ghost" onclick="exportCSV()">${ic('down', 's')} Ventes Excel</button><button class="btn ghost" onclick="exportStockCSV()">${ic('down', 's')} Stock Excel</button><button class="btn" onclick="backup()">${ic('down', 's')} Sauvegarder</button><label class="btn ghost" style="cursor:pointer">Restaurer<input type="file" accept=".json" style="display:none" onchange="restore(this.files[0])"></label></div></div>
-    <button class="btn soft full" style="color:var(--bad);margin-top:8px" onclick="wipe()">${ic('trash', 's')} Effacer toutes les données</button>`;
+    <button class="btn soft full" style="color:var(--bad);margin-top:8px" onclick="wipe()">${ic('trash', 's')} Effacer toutes les données</button>
+    <h3>Compte</h3>
+    <div class="card"><b>Supprimer mon compte Boutik</b><div class="mut" style="margin:4px 0 12px">Efface définitivement la boutique${SYNC.cfg ? ' sur notre serveur (ventes, stock, vendeurs, réglages) et sur ce téléphone. Les autres téléphones de la boutique ne pourront plus se synchroniser' : ' et toutes ses données sur ce téléphone'}. Irréversible.</div>
+      <button class="btn full" style="background:var(--bad);color:#fff" onclick="deleteAccount()">${ic('trash', 's')} Supprimer mon compte</button>
+      ${serverURL() ? `<div class="mut" style="margin-top:8px">Aussi possible sur le web : ${esc(serverURL().replace(/^https?:\/\//, ''))}/suppression-compte</div>` : ''}</div>`;
 };
-function saveSettings() { const s = db.settings; s.shopName = v('gs') || s.shopName; s.ownerName = v('go') || s.ownerName; s.contact = v('gt'); s.ownerPhone = v('gw'); s.currency = v('gc') || 'FCFA'; s.lowDefault = +v('gl') || 0; const p = v('gp'); if (p) { if (!/^\d{4}$/.test(p)) return toast('Code de 4 chiffres'); s.ownerPin = p; } log('Paramètres modifiés'); save(); render(); toast('Enregistré'); }
+function saveSettings() { const s = db.settings; s.shopName = v('gs') || s.shopName; s.ownerName = v('go') || s.ownerName; s.contact = v('gt'); s.ncc = v('gncc').trim(); s.receiptNote = v('gnote').trim(); s.ownerPhone = v('gw'); s.currency = v('gc') || 'FCFA'; s.lowDefault = +v('gl') || 0; const p = v('gp'); if (p) { if (!/^\d{4}$/.test(p)) return toast('Code de 4 chiffres'); s.ownerPin = p; } log('Paramètres modifiés'); save(); render(); toast('Enregistré'); }
 const csvCell = x => `"${String(x ?? '').replace(/"/g, '""')}"`;
 const csv = rows => '﻿' + rows.map(r => r.map(csvCell).join(';')).join('\n');
 function exportCSV() { const rows = [['N°', 'Date', 'Vendeur', 'Produit', 'Qté', 'Prix', 'Coût', 'Total ligne', 'Saisi main', 'Paiement', 'Réf MoMo', 'Client', 'Remise vente', 'Annulée', 'Vérifiée']]; db.sales.forEach(s => s.items.forEach(i => rows.push([s.no, new Date(s.date).toLocaleString('fr-FR'), userName(s.user), i.name, i.qty, i.price, i.cost, i.qty * i.price, i.manuel || 0, PAY[s.pay], s.ref || '', s.client || '', s.discount || 0, s.cancelled ? 'oui' : '', s.verified ? 'oui' : '']))); download(`ventes-${today()}.csv`, csv(rows), 'text/csv'); }
 function exportStockCSV() { const rows = [['Code', 'Produit', 'Catégorie', 'Stock', 'Prix achat', 'Prix vente', 'Valeur achat', 'Code-barres']]; db.products.filter(p => p.active).forEach(p => rows.push([p.code, p.name, p.cat, p.stock, p.cost, p.price, p.stock * p.cost, p.barcode])); download(`stock-${today()}.csv`, csv(rows), 'text/csv'); }
 function backup() { download(`boutik-sauvegarde-${today()}.json`, JSON.stringify(db), 'application/json'); log('Sauvegarde'); save(); }
 function restore(f) { if (!f) return; const r = new FileReader(); r.onload = async () => { try { let d = JSON.parse(r.result); if (!(d.v >= 2) || !d.settings) throw 0; d = migrate(d); if (!(await ask('Remplacer toutes les données par cette sauvegarde ?', { ok: 'Remplacer', danger: true }))) return; db = d; recomputeStock(); save(); toast('Données restaurées'); renderLogin(); } catch (e) { toast('Fichier invalide'); } }; r.readAsText(f); }
+async function deleteAccount() {
+  if (!isOwner()) return;
+  const t = await ask('Supprimer définitivement le compte ?', { input: 1, ph: 'Tapez SUPPRIMER', ok: 'Supprimer', danger: true, sub: SYNC.cfg ? 'La boutique et toutes ses données seront effacées de notre serveur et de ce téléphone. Les paiements d\'abonnement restent dans notre comptabilité.' : 'Toutes les données de la boutique seront effacées de ce téléphone.' });
+  if (String(t || '').trim().toUpperCase() !== 'SUPPRIMER') return;
+  if (!(await ownerAuth('Supprimer le compte Boutik'))) return;
+  if (SYNC.cfg) {
+    try { await api('/api/delete', { shop: SYNC.cfg.shop, key: SYNC.cfg.key }); }
+    catch (e) { if (e.status !== 403) return toast(e.status === 429 ? 'Trop d\'essais, réessayez plus tard' : 'Pas de connexion : réessayez avec internet'); }
+  }
+  try { [kf(KEY), kf(SK), kf(HK)].concat(SHOPS.active === 'main' ? ['boutik_v2'] : []).forEach(k => localStorage.removeItem(k)); } catch (e) {}
+  try { localStorage.removeItem(BIO_K()); } catch (e) {}
+  SHOPS.list = SHOPS.list.filter(x => x.sid !== SHOPS.active); saveShops(); SYNC.cfg = null; SYNC.hashes = {};
+  toast('Compte supprimé');
+  if (SHOPS.list.length) return switchShop(SHOPS.list[0].sid); db = blank(); start();
+}
 async function wipe() { if ((await ask('Tapez EFFACER pour tout supprimer', { input: 1, ok: 'Effacer', danger: true, sub: SYNC.cfg ? 'Seul cet appareil est effacé ; les données en ligne restent.' : '' })) !== 'EFFACER') return; try { [kf(KEY), kf(SK), kf(HK)].concat(SHOPS.active === 'main' ? ['boutik_v2'] : []).forEach(k => localStorage.removeItem(k)); } catch (e) {} SHOPS.list = SHOPS.list.filter(x => x.sid !== SHOPS.active); saveShops(); SYNC.cfg = null; SYNC.hashes = {}; if (SHOPS.list.length) return switchShop(SHOPS.list[0].sid); db = blank(); start(); }
 
 /* ================= SUIVI À DISTANCE (synchronisation) ================= */
@@ -1853,6 +2011,10 @@ const HOWTO = [
   [/visage|empreinte|face id|biometr/, 'Visage ou empreinte', () => 'Dans ' + B('Paramètres → Sécurité → Activer sur ce téléphone') + '. À faire seulement sur le téléphone du patron.', () => isOwner() ? [act('Paramètres', () => go('reglages'))] : []],
   [/carton|kilo|casier|au detail|sac de/, 'Carton et kilo', () => 'Dans la fiche du produit, choisissez « Se vend au kilo » si besoin, puis ouvrez ' + B('Carton, prix de gros, marchandage') + ' : nom (Casier), contenu (24), prix. À la caisse, le vendeur choisit « 1 bouteille » ou « 1 casier ».', () => []],
   [/vendre a credit|credit (a|au) (un )?client|comment.*credit/, 'Vente à crédit', () => 'Au moment de payer, choisissez ' + B('Crédit') + ' et notez le nom du client. Le remboursement s\'enregistre dans « Crédits clients ».', () => [act('Crédits clients', () => go('credits'))]],
+  [/perim|peremption|date limite|\bdlc\b/, 'Péremption', () => { if (!F('peremption')) return 'Activez ' + B('Dates de péremption') + ' dans Fonctions, puis indiquez la date la plus proche dans la fiche de chaque produit.'; const l = db.products.filter(p => p.active && expSoon(p)).sort((a, b) => a.exp.localeCompare(b.exp)); return l.length ? B(l.length + ' produit(s) à vendre vite') + ' :<ul>' + l.slice(0, 8).map(p => `<li>${esc(p.name)} : ${daysTo(p.exp) < 0 ? 'périmé' : 'dans ' + daysTo(p.exp) + ' j'} (${nq(p.stock)} en stock)</li>`).join('') + '</ul>Mettez-les en avant ou faites une petite promotion.' : 'Aucun produit ne périme dans les ' + EXP_DAYS + ' prochains jours.'; }, () => [act('Voir', () => { ui.stockFilter = 'exp'; go('stock'); })]],
+  [/retour|echange|rembours|rapporte/, 'Retour ou échange', () => 'Ouvrez la vente (Mes ventes ou Toutes les ventes), puis ' + B('Retour ou échange') + '. Choisissez les articles rendus : ils reviennent dans le stock. ' + B('Rembourser') + ' rend l\'argent ; ' + B('Échanger') + ' permet d\'ajouter les nouveaux articles et d\'encaisser la différence.' + (isOwner() ? '' : ' Le code du patron est demandé.'), () => []],
+  [/taille|couleur|variante|vetement|chaussure|pointure/, 'Tailles et couleurs', () => 'Activez ' + B('Tailles et couleurs') + ' dans Fonctions, puis ' + B('Stock → Modèle tailles / couleurs') + ' : nom, prix, tailles (ex. S, M, L), couleurs et stock de chaque variante. Chaque variante a ses étiquettes ; à la caisse, le modèle s\'ouvre sur la grille des tailles.', () => isOwner() ? [act('Stock', () => go('stock'))] : []],
+  [/supprimer (mon |le )?compte|supprimer (ma )?boutique|effacer (mon )?compte/, 'Supprimer mon compte', () => 'Le propriétaire va dans ' + B('Paramètres → Compte → Supprimer mon compte') + ' et confirme avec son code. La boutique et ses données sont effacées définitivement du serveur et du téléphone.', () => isOwner() ? [act('Paramètres', () => go('reglages'))] : []],
   [/abonnement|expire|payer boutik/, 'Abonnement', () => { const sb = SYNC.cfg && SYNC.cfg.sub; return sb ? `Votre abonnement est ${B(esc(sb.status))} jusqu'au ${B(new Date(sb.until).toLocaleDateString('fr-FR'))}. ${sb.support ? 'Contact : ' + esc(sb.support) : ''}` : 'La boutique n\'est pas encore en ligne : l\'abonnement concerne le suivi à distance (Paramètres → Mettre ma boutique en ligne).'; }, () => []],
 ];
 

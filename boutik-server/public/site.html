@@ -80,7 +80,7 @@ h2{font-size:clamp(30px,4vw,44px);line-height:1.08;letter-spacing:-.025em;margin
 .feats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .vid{position:relative;margin:28px auto 0;max-width:1080px;border-radius:28px;overflow:hidden;box-shadow:0 30px 80px rgba(16,24,40,.18);background:#0d0f12;aspect-ratio:16/9}
 .vid video{width:100%;height:100%;display:block;object-fit:cover}
-.vsound{position:absolute;left:18px;bottom:18px;border:0;border-radius:30px;padding:12px 20px;font:inherit;font-weight:700;background:rgba(255,255,255,.92);color:#0d0f12;cursor:pointer}
+.vsound{display:inline-flex;align-items:center;gap:10px;margin-top:18px;border:0;border-radius:30px;padding:13px 24px;font:inherit;font-weight:700;background:#0d0f12;color:#fff;cursor:pointer}.vsound:hover{background:#ff5b1f}
 .feat{background:var(--card);border-radius:22px;padding:22px;box-shadow:0 1px 2px rgba(16,24,40,.04),0 8px 24px rgba(16,24,40,.05)}
 .ico{width:46px;height:46px;border-radius:14px;background:var(--accl);color:var(--acc);display:flex;align-items:center;justify-content:center;margin-bottom:14px}
 .split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:48px;align-items:center}
@@ -163,7 +163,8 @@ footer a{color:#fff;text-decoration:none}
 <section class="band white" id="video" style="padding-bottom:0"><div class="w" style="text-align:center">
   <h2>Boutik en 36 secondes</h2>
   <div class="vid"><video id="vd" muted loop playsinline autoplay preload="auto"></video>
-    <button class="vsound" id="vsnd" type="button">▶ Revoir depuis le début</button></div>
+  </div>
+  <button class="vsound" id="vsnd" type="button"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>Regarder avec le son</button>
 </div></section>
 
 <section class="band white" id="comment"><div class="w">
@@ -239,7 +240,7 @@ footer a{color:#fff;text-decoration:none}
   <div class="ctas"><a class="btn acc" href="/app/">Essayer gratuitement</a><a class="btn" id="ctaWa3" href="#questions" target="_blank" rel="noopener">Parler à un conseiller</a></div>
 </div></section>
 
-<footer><div class="w"><span>© <span id="yr"></span> Boutik<span id="ed"></span></span><span><a href="/confidentialite">Confidentialité</a> · <a href="/app/">Ouvrir l'appli</a> · <span id="mail"></span></span></div></footer>
+<footer><div class="w"><span>© <span id="yr"></span> Boutik<span id="ed"></span></span><span><a href="/confidentialite">Confidentialité</a> · <a href="/suppression-compte">Supprimer mon compte</a> · <a href="/app/">Ouvrir l'appli</a> · <span id="mail"></span></span></div></footer>
 
 <script>
 // Mini encodeur QR (mode octet, correction M, versions 1-10)
@@ -366,7 +367,7 @@ const QR = (() => {
 
 
 {
-const I = { monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',  shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/>', lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>', eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>', scan: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M4 12h16"/>', phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>', box: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>', cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>', card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>', send: '<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>', wifi: '<path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01"/><path d="M3 3l18 18"/>', hand: '<path d="M7 11V5a1.5 1.5 0 0 1 3 0v5M10 10V3.5a1.5 1.5 0 0 1 3 0V10M13 10V5a1.5 1.5 0 0 1 3 0v6M16 11V8a1.5 1.5 0 0 1 3 0v6a7 7 0 0 1-7 7h-1a6 6 0 0 1-5-2.7L3 14a1.5 1.5 0 0 1 2.5-1.7L7 14"/>', check: '<path d="m5 12 5 5 9-10"/>', spark: '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>' };
+const I = { tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>', monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',  shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/>', lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>', eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>', scan: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M4 12h16"/>', phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>', box: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>', cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>', card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>', send: '<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>', wifi: '<path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01"/><path d="M3 3l18 18"/>', hand: '<path d="M7 11V5a1.5 1.5 0 0 1 3 0v5M10 10V3.5a1.5 1.5 0 0 1 3 0V10M13 10V5a1.5 1.5 0 0 1 3 0v6M16 11V8a1.5 1.5 0 0 1 3 0v6a7 7 0 0 1-7 7h-1a6 6 0 0 1-5-2.7L3 14a1.5 1.5 0 0 1 2.5-1.7L7 14"/>', check: '<path d="m5 12 5 5 9-10"/>', spark: '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>' };
 const ic = n => `<svg class="i" viewBox="0 0 24 24">${I[n]}</svg>`;
 const feats = [
   ['lock', 'Caisse comptée à l\'aveugle', 'Le vendeur compte ses billets sans voir le montant attendu. Il ne peut pas « arranger » son comptage.'],
@@ -382,6 +383,7 @@ const local = [
   ['card', 'Crédit des clients et des fournisseurs', 'Qui doit combien, relance WhatsApp en un geste, dettes envers vos grossistes.'],
   ['hand', 'Marchandage encadré et prix de gros', 'Le vendeur négocie jusqu\'au prix minimum que vous fixez, pas en dessous.'],
   ['wifi', 'Coupures de réseau ? Aucun problème', 'Boutik vend sans internet et envoie tout dès que le réseau revient.'],
+  ['tag', 'Vêtements et chaussures', 'Un modèle en plusieurs tailles et couleurs, chacune avec son stock et ses étiquettes. Retours et échanges en un geste.'],
   ['phone', 'Paiement Wave par QR code', 'Le vendeur montre votre QR Wave avec le montant. Le client paie, vous vérifiez chaque paiement.'],
   ['monitor', 'Sur téléphone et sur ordinateur', 'Grand écran avec menu sur ordinateur, version mobile en un clic.'],
   ['send', 'Bilan du soir sur WhatsApp', 'Ventes, bénéfice, caisses justes ou en manque, produits à racheter.'],
@@ -400,6 +402,7 @@ const faq = [
   ['Mes clients peuvent-ils payer avec Wave ?', 'Oui. Enregistrez une fois le QR de votre compte Wave marchand : à chaque vente, le vendeur le montre au client avec le montant. Le paiement est noté dans la caisse et vous pouvez le vérifier avec vos SMS.'],
   ['Ça marche sur ordinateur ?', 'Oui. Sur ordinateur, Boutik s\'ouvre dans le navigateur en grand écran, avec le menu à gauche. Un bouton permet de passer en version mobile.'],
   ['Puis-je payer à l\'année ?', 'Oui, l\'abonnement annuel revient moins cher que 12 mois. Si vous avez un code promo, saisissez-le dans l\'appli (Paramètres → Mon abonnement) ou donnez-le à notre équipe.'],
+  ['Pour quels commerces ?', 'Alimentation, supérette, boissons, cosmétiques, téléphonie, quincaillerie, librairie, bazar, vêtements et chaussures (tailles et couleurs), services. Les dates de péremption peuvent être suivies. Boutik ne convient pas aux pharmacies ni aux restaurants.'],
   ['Combien de vendeurs et de produits ?', 'Autant que vous voulez : vendeurs, produits et ventes sont illimités. Chaque vendeur a son code et peut avoir sa propre langue.'],
   ['Et si j\'arrête de payer ?', 'Vos ventes restent sur votre téléphone, rien n\'est effacé. Seule la synchronisation avec les autres téléphones s\'arrête.']
 ];
@@ -407,8 +410,9 @@ document.getElementById('faq').innerHTML = faq.map(([q, a]) => `<details><summar
 ['q1', 'q2'].forEach((id, k) => { const m = QR.encode(k ? 'P0001-0007' : 'P0002-0012'), n = m.length; let d = ''; for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (m[y][x]) d += `M${x + 4},${y + 4}h1v1h-1z`; const s = document.getElementById(id); s.setAttribute('viewBox', `0 0 ${n + 8} ${n + 8}`); s.innerHTML = `<path d="${d}" fill="#0d0f12"/>`; });
 // Vidéo : lecture directe ; si la page est hébergée dans un cadre qui bloque les fichiers vidéo, on la charge en mémoire (blob).
 (() => {
-  const v = document.getElementById('vd'), b = document.getElementById('vsnd'); let viaBlob = false;
-  const play = () => { v.muted = true; const p = v.play(); if (p && p.catch) p.catch(() => {}); };
+  const v = document.getElementById('vd'), b = document.getElementById('vsnd'); let viaBlob = false, sound = false;
+  const play = () => { if (!sound) v.muted = true; const p = v.play(); if (p && p.catch) p.catch(() => {}); };
+  v.addEventListener('ended', () => { sound = false; v.controls = false; v.loop = true; b.style.visibility = 'visible'; play(); });
   const blob = async u => URL.createObjectURL(await (await fetch(u)).blob());
   async function fallback() { if (viaBlob) return; viaBlob = true; try { v.poster = await blob('boutik-poster.jpg'); } catch (e) {} try { v.src = await blob('boutik.mp4'); v.load(); play(); } catch (e) { document.getElementById('video').style.display = 'none'; } }
   v.addEventListener('error', fallback);
@@ -417,7 +421,7 @@ document.getElementById('faq').innerHTML = faq.map(([q, a]) => `<details><summar
   setTimeout(() => { if (v.readyState < 2) fallback(); }, 2500);
   // Démarre quand la vidéo devient visible, met en pause sinon
   if ('IntersectionObserver' in window) new IntersectionObserver(es => es.forEach(e => e.isIntersecting ? play() : v.pause()), { threshold: .3 }).observe(v);
-  b.onclick = () => { v.controls = true; if (v.readyState < 2) fallback(); else v.currentTime = 0; play(); b.remove(); };
+  b.onclick = () => { v.controls = true; v.muted = false; v.loop = false; if (v.readyState < 2) fallback(); else v.currentTime = 0; const p = v.play(); if (p && p.catch) p.catch(() => {}); sound = true; b.style.visibility = 'hidden'; };
 })();
 document.getElementById('yr').textContent = new Date().getFullYear();
 const nf = n => Math.round(n || 0).toLocaleString('fr-FR').replace(/[  ]/g, ' ');

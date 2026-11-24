@@ -38,6 +38,16 @@ function upgrade(s) {
   if (!s.plan) s.plan = { until: new Date(new Date(s.created || Date.now()).getTime() + TRIAL_DAYS * DAY).toISOString(), status: 'essai', suspended: false };
   s.devices = s.devices || {}; s.pays = s.pays || []; s.info = s.info || {}; s.lastSeen = s.lastSeen || s.created;
 }
+// Suppression définitive d'une boutique (compte) et de toutes ses données sur le serveur
+const DEL_F = path.join(DATA, '_deletions.json');
+let DELS = fs.existsSync(DEL_F) ? JSON.parse(fs.readFileSync(DEL_F, 'utf8')) : [];
+const saveDels = () => fs.writeFileSync(DEL_F, JSON.stringify(DELS));
+function deleteShop(id, why) {
+  const s = getShop(id); if (!s) return false;
+  shops.delete(id); dirty.delete(id); try { fs.unlinkSync(shopFile(id)); } catch (e) {}
+  DELS.unshift({ id: crypto.randomBytes(4).toString('hex'), date: nowIso(), shop: id, name: s.name || '', how: why, done: true }); DELS = DELS.slice(0, 500); saveDels();
+  return true;
+}
 function allShopIds() { return fs.readdirSync(DATA).filter(f => /^[a-f0-9]{16}\.json$/.test(f)).map(f => f.slice(0, 16)); }
 function persist() {
   for (const id of dirty) { const f = shopFile(id); fs.writeFileSync(f + '.tmp', JSON.stringify(shops.get(id))); fs.renameSync(f + '.tmp', f); }
@@ -127,7 +137,7 @@ function stats(s) {
 function shopSummary(id, s) { return { id, created: s.created, lastSeen: s.lastSeen, plan: s.plan, sub: subState(s), info: s.info, pays: s.pays, devicesList: s.devices, stats: stats(s) }; }
 
 const STATIC = {
-  '/': ['site.html', 'text/html; charset=utf-8'], '/confidentialite': ['confidentialite.html', 'text/html; charset=utf-8'],
+  '/': ['site.html', 'text/html; charset=utf-8'], '/confidentialite': ['confidentialite.html', 'text/html; charset=utf-8'], '/suppression-compte': ['suppression.html', 'text/html; charset=utf-8'],
   '/app': ['index.html', 'text/html; charset=utf-8'], '/app/': ['index.html', 'text/html; charset=utf-8'], '/index.html': ['index.html', 'text/html; charset=utf-8'],
   '/admin': ['admin.html', 'text/html; charset=utf-8'], '/admin/': ['admin.html', 'text/html; charset=utf-8'],
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/sw.js': ['sw.js', 'text/javascript; charset=utf-8'],
@@ -138,7 +148,7 @@ http.createServer(async (req, res) => {
   try {
     const u = new URL(req.url, 'http://local'), p = u.pathname, ip = ipOf(req);
     const og = req.headers.origin; CORS = null;
-    if (og && APP_ORIGINS.has(og) && /^\/api\/(ping|register|sync|public|assistant|promo|count)$/.test(p)) CORS = { 'Access-Control-Allow-Origin': og, 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '86400', 'Vary': 'Origin' };
+    if (og && APP_ORIGINS.has(og) && /^\/api\/(ping|register|sync|public|assistant|promo|count|delete|delete-request)$/.test(p)) CORS = { 'Access-Control-Allow-Origin': og, 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '86400', 'Vary': 'Origin' };
     if (req.method === 'OPTIONS') { res.writeHead(CORS ? 204 : 403, CORS || {}); return res.end(); }
     if (req.method === 'GET' && p === '/api/public') return json(res, 200, publicCfg());
     if (req.method === 'GET' && p === '/api/ping') return json(res, 200, { ok: true, app: 'boutik' });
@@ -175,6 +185,20 @@ http.createServer(async (req, res) => {
       return json(res, 200, { seq: s.seq, pull, sub });
     }
 
+    if (req.method === 'POST' && p === '/api/delete') {
+      if (limited('del:' + ip, 10, 36e5)) return json(res, 429, { error: 'Trop d\'essais, réessayez plus tard' });
+      const b = await readBody(req, 1e4); let id = String(b.shop || ''), key = String(b.key || '');
+      const m = /^BOUTIK1\|[^|]*\|([a-f0-9]{16})\|([a-f0-9]{32})$/.exec(String(b.code || '').trim()); if (m) { id = m[1]; key = m[2]; }
+      const s = getShop(id); if (!s || !same(s.key, key)) return json(res, 403, { error: 'Code incorrect' });
+      deleteShop(id, m ? 'page web (code de la boutique)' : 'appli'); return json(res, 200, { ok: true });
+    }
+    if (req.method === 'POST' && p === '/api/delete-request') {
+      if (limited('delreq:' + ip, 5, 36e5)) return json(res, 429, { error: 'Trop de demandes, réessayez plus tard' });
+      const b = await readBody(req, 1e4), name = String(b.name || '').trim().slice(0, 80), contact = String(b.contact || '').trim().slice(0, 80);
+      if (!name || !contact) return json(res, 400, { error: 'Indiquez le nom de la boutique et un contact' });
+      DELS.unshift({ id: crypto.randomBytes(4).toString('hex'), date: nowIso(), name, contact, note: String(b.note || '').slice(0, 500), done: false }); DELS = DELS.slice(0, 500); saveDels();
+      return json(res, 200, { ok: true });
+    }
     if (req.method === 'POST' && p === '/api/promo') {
       if (limited('promo:' + ip, 20, 36e5)) return json(res, 429, { error: 'Trop d\'essais, réessayez plus tard' });
       const b = await readBody(req, 1e4), x = promoValid(b.code);
@@ -247,7 +271,7 @@ http.createServer(async (req, res) => {
       if (req.method === 'POST' && p === '/api/admin/logout') { sessions.delete((req.headers.authorization || '').replace(/^Bearer /, '')); return json(res, 200, { ok: true }); }
       if (req.method === 'GET' && p === '/api/admin/shops') {
         const list = allShopIds().map(id => shopSummary(id, getShop(id)));
-        return json(res, 200, { shops: list, config: CFG, trialDays: TRIAL_DAYS, graceDays: GRACE_DAYS, support: SUPPORT });
+        return json(res, 200, { shops: list, config: CFG, trialDays: TRIAL_DAYS, graceDays: GRACE_DAYS, support: SUPPORT, deletions: DELS.slice(0, 100) });
       }
       if (req.method === 'POST' && p === '/api/admin/config') {
         const b = await readBody(req, 2e5); CFG.price = Math.max(0, +b.price || 0); CFG.currency = String(b.currency || 'FCFA').slice(0, 8);
@@ -260,6 +284,9 @@ http.createServer(async (req, res) => {
         CFG.playUrl = url(b.playUrl); CFG.appStoreUrl = url(b.appStoreUrl); CFG.whatsapp = String(b.whatsapp || '').replace(/[^\d+]/g, '').slice(0, 20); CFG.email = String(b.email || '').slice(0, 120); CFG.editor = String(b.editor || '').slice(0, 120); saveCfg();
         return json(res, 200, { config: CFG });
       }
+      if (req.method === 'POST' && p === '/api/admin/deletion-done') { const b = await readBody(req, 1e4); const x = DELS.find(d => d.id === b.id); if (x) { x.done = true; x.doneAt = nowIso(); saveDels(); } return json(res, 200, { deletions: DELS.slice(0, 100) }); }
+      const dm = p.match(/^\/api\/admin\/shop\/([a-f0-9]{16})\/delete$/);
+      if (req.method === 'POST' && dm) { const b = await readBody(req, 1e4); if (b.confirm !== 'SUPPRIMER') return json(res, 400, { error: 'Confirmation manquante' }); if (!deleteShop(dm[1], 'console fournisseur')) return json(res, 404, { error: 'Boutique introuvable' }); if (b.request) { const x = DELS.find(d => d.id === b.request); if (x) { x.done = true; x.doneAt = nowIso(); saveDels(); } } return json(res, 200, { ok: true, deletions: DELS.slice(0, 100) }); }
       const m = p.match(/^\/api\/admin\/shop\/([a-f0-9]{16})\/(extend|suspend|rekey|info|unpay|plan)$/);
       if (req.method === 'POST' && m) {
         const s = getShop(m[1]); if (!s) return json(res, 404, { error: 'Boutique introuvable' });

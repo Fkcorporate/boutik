@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boutik — Supprimer mon compte</title>
+<link rel="icon" href="/icon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f6f6f4;color:#0d0f12;font:17px/1.65 "Plus Jakarta Sans",system-ui,sans-serif}
+header{background:#0d0f12;color:#fff;padding:18px max(5vw,18px)}header a{color:#fff;text-decoration:none;font-weight:800}
+main{max-width:760px;margin:0 auto;padding:36px max(5vw,18px) 60px}
+h1{font-size:34px;line-height:1.1;letter-spacing:-.02em;margin:0 0 8px}
+h2{font-size:21px;margin:32px 0 8px}
+p,li{color:#2a2f37}.mut{color:#6b7280;font-size:15px}
+ul{padding-left:22px}
+.card{background:#fff;border-radius:20px;padding:22px;box-shadow:0 1px 2px rgba(16,24,40,.05),0 8px 24px rgba(16,24,40,.06);margin:16px 0}
+label{display:block;font-weight:600;font-size:15px;margin:14px 0 6px}input,textarea{width:100%;box-sizing:border-box;font:inherit;font-size:16px;padding:12px 14px;border:1.5px solid #dfe2e7;border-radius:14px;background:#fff}
+button{font:inherit;font-weight:800;border:0;border-radius:14px;padding:14px 20px;cursor:pointer;margin-top:14px}.bad{background:#c81e1e;color:#fff}.dark{background:#0d0f12;color:#fff}
+.msg{margin-top:12px;font-weight:600}.ok{color:#15803d}.err{color:#c81e1e}
+</style>
+</head>
+<body>
+<header><a href="/">← Boutik</a></header>
+<main>
+<h1>Supprimer mon compte Boutik</h1>
+<p class="mut">Application Boutik (web, Android et iPhone) · éditeur : <span class="ed">l'éditeur de Boutik</span></p>
+<p>Le compte Boutik, c'est votre boutique en ligne : ses produits, ventes, vendeurs, dépenses, crédits et réglages enregistrés sur notre serveur. La suppression est <b>définitive</b> : toutes ces données sont effacées de notre serveur, et la synchronisation s'arrête sur tous les téléphones de la boutique.</p>
+<p>Conservées : les paiements de l'abonnement (date et montant) dans notre comptabilité, comme la loi l'exige. Rien d'autre.</p>
+
+<h2>1. Depuis l'application (le plus simple)</h2>
+<p>Ouvrez Boutik avec le compte propriétaire, puis <b>Plus → Paramètres → Compte → Supprimer mon compte</b>. Confirmez avec votre code secret ou votre empreinte.</p>
+
+<h2>2. Ici, avec le code de votre boutique</h2>
+<div class="card">
+<p style="margin-top:0">Dans l'appli : Paramètres → Suivi à distance → <b>Connecter un autre téléphone</b>. Un code qui commence par <code>BOUTIK1|</code> s'affiche : copiez-le ici.</p>
+<label for="code">Code de la boutique</label><textarea id="code" rows="3" placeholder="BOUTIK1|…"></textarea>
+<label for="conf">Tapez SUPPRIMER pour confirmer</label><input id="conf" autocomplete="off">
+<button class="bad" id="go">Supprimer définitivement</button><div class="msg" id="m1" role="status"></div>
+</div>
+
+<h2>3. Sans l'application</h2>
+<div class="card">
+<p style="margin-top:0">Vous n'avez plus l'appli ou plus votre téléphone ? Envoyez-nous une demande : nous vérifions que vous êtes bien le propriétaire, puis nous supprimons le compte sous 30 jours au plus tard, et vous prévenons.</p>
+<label for="nm">Nom de la boutique</label><input id="nm">
+<label for="ct">Votre téléphone, WhatsApp ou e-mail</label><input id="ct">
+<label for="nt">Précisions (facultatif)</label><textarea id="nt" rows="3"></textarea>
+<button class="dark" id="rq">Envoyer la demande</button><div class="msg" id="m2" role="status"></div>
+</div>
+
+<h2>Et les données sur le téléphone ?</h2>
+<p>Ce qui est enregistré sur un téléphone s'efface en désinstallant l'application, ou dans l'appli : Paramètres → Effacer toutes les données.</p>
+<p class="mut">Voir aussi notre <a href="/confidentialite">politique de confidentialité</a>.</p>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const say = (el, t, ok) => { el.textContent = t; el.className = 'msg ' + (ok ? 'ok' : 'err'); };
+async function post(u, b) { const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'Erreur'); return j; }
+$('go').onclick = async () => {
+  if ($('conf').value.trim().toUpperCase() !== 'SUPPRIMER') return say($('m1'), 'Tapez SUPPRIMER pour confirmer.');
+  try { await post('/api/delete', { code: $('code').value.trim() }); say($('m1'), 'Compte supprimé. Toutes les données de la boutique ont été effacées de notre serveur.', true); $('go').disabled = true; }
+  catch (e) { say($('m1'), e.message === 'Code incorrect' ? 'Code incorrect : vérifiez que vous avez copié tout le code.' : e.message); }
+};
+$('rq').onclick = async () => {
+  try { await post('/api/delete-request', { name: $('nm').value, contact: $('ct').value, note: $('nt').value }); say($('m2'), 'Demande envoyée. Nous vous contactons pour confirmer.', true); $('rq').disabled = true; }
+  catch (e) { say($('m2'), e.message); }
+};
+fetch('/api/public').then(r => r.json()).then(c => { if (c.editor) document.querySelectorAll('.ed').forEach(e => e.textContent = c.editor); }).catch(() => {});
+</script>
+</body>
+</html>

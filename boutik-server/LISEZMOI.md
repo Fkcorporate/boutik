@@ -120,3 +120,9 @@ Même clé `ANTHROPIC_API_KEY` que l'assistant. Le commerçant active « Comptag
 - l'IA reçoit aussi les photos des produits enregistrées dans Stock (12 au plus, en petit format) pour ne pas confondre les variantes ;
 - le résultat est corrigeable, puis passe par le **recensement** normal : le patron voit les écarts et coche ce qu'il corrige, et un vendeur l'envoie au patron ;
 - chaque comptage par photo est noté dans le journal. Le scanner compte aussi, sans IA, les étiquettes QR visibles.
+
+## Suppression de compte (obligatoire pour Google Play et l'App Store)
+
+- **Dans l'appli :** le propriétaire va dans Paramètres → Compte → Supprimer mon compte. La boutique est effacée du serveur et du téléphone.
+- **Sur le web :** `/suppression-compte`, avec le code de la boutique, ou par une demande. Les demandes apparaissent en haut de votre console : vérifiez l'identité, supprimez la boutique (fiche → Supprimer la boutique), puis marquez la demande traitée, sous 30 jours.
+- Chaque suppression est notée dans `_deletions.json`, avec la date et le moyen utilisé, sans les données de la boutique.

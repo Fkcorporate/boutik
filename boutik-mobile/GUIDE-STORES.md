@@ -69,7 +69,8 @@ npm run build && npx cap sync
    - **Sécurité des données :**
      - données collectées : informations financières (achats et ventes), noms et téléphones (vendeurs, clients à crédit) ;
      - données chiffrées en transit ;
-     - suppression possible sur demande.
+     - **suppression de compte : oui**, dans l'appli (Paramètres → Compte → Supprimer mon compte) **et** sur le web ;
+     - **lien de suppression à indiquer :** `https://votre-adresse/suppression-compte` (page déjà en ligne sur votre serveur).
    - **Autorisations :**
      - caméra : scan des codes ;
      - Bluetooth : imprimante ;
@@ -88,7 +89,21 @@ npm run build && npx cap sync
    - fiche, captures d'écran iPhone, lien de confidentialité, questionnaire « confidentialité de l'app » (mêmes réponses que pour Google) ;
    - pour la revue d'Apple, donnez un **compte de démonstration** : une boutique de test, le code du propriétaire et celui d'un vendeur.
    - **Pour éviter un refus**, expliquez dans les notes que l'appli fonctionne hors connexion, scanne plusieurs codes avec la caméra native, imprime en Bluetooth et utilise Face ID.
+   - **Suppression de compte (règle 5.1.1(v)) :** indiquez dans les notes où elle se trouve : « Plus → Paramètres → Compte → Supprimer mon compte ». Elle efface la boutique du serveur et du téléphone.
 6. Une fois publiée, collez le lien App Store dans **/admin → Réglages**.
+
+## 5. Installer sans passer par les stores
+
+**Android : oui.**
+- **Fichier APK** : dans Android Studio, *Build → Generate Signed App Bundle / APK* → **APK**. Envoyez le fichier par WhatsApp ou mettez-le en téléchargement. Le commerçant autorise « Installer des applis inconnues » puis l'installe.
+- ⚠️ Google impose peu à peu que toute appli installée sur un téléphone Android certifié vienne d'un **développeur vérifié** : déjà au Brésil, en Indonésie, à Singapour et en Thaïlande depuis septembre 2026, partout à partir de 2027. Créez votre compte (Play Console ou Android Developer Console) et enregistrez l'appli pour que vos APK restent installables.
+- **Inconvénient** : pas de mise à jour automatique. Il faut renvoyer chaque nouvelle version.
+
+**iPhone : pas vraiment.** Hors Union européenne (et Japon, Brésil), Apple n'autorise l'installation que depuis l'App Store. Solutions possibles :
+- **Version web installable** (déjà prête, gratuite) : ouvrir `https://votre-adresse/app/` dans Safari → Partager → **Sur l'écran d'accueil**. L'icône Boutik apparaît comme une appli, hors connexion compris. Limites : scan en direct un peu moins rapide, pas d'imprimante Bluetooth sur iPhone, Face ID par le navigateur.
+- **TestFlight** (avec le compte Apple Developer) : pour un pilote, jusqu'à 10 000 testeurs par lien d'invitation. Chaque version reste valable 90 jours. Pratique pour tester avant la publication, pas pour vendre.
+
+**Conseil** : Android en APK + version web pour les iPhone suffisent pour le pilote. Passez par les stores pour vendre à grande échelle (confiance, mises à jour automatiques).
 
 ## En cas de souci
 
