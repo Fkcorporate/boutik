@@ -286,11 +286,24 @@ http.createServer(async (req, res) => {
     }
 
     /* ===== fichiers ===== */
-    const st = req.method === 'GET' && STATIC[p];
+    const st = (req.method === 'GET' || req.method === 'HEAD') && STATIC[p];
     if (st) {
       const f = path.join(PUB, st[0]); if (!fs.existsSync(f)) return json(res, 404, { error: 'introuvable' });
       const headers = { 'Content-Type': st[1], 'Cache-Control': /html|sw\.js/.test(st[0]) ? 'no-cache' : 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff' };
       if (st[0] === 'admin.html') Object.assign(headers, { 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store' });
+      // Vidéo : réponses partielles (Range), indispensables pour Safari / iPhone
+      if (st[1] === 'video/mp4') {
+        const size = fs.statSync(f).size, m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+        headers['Accept-Ranges'] = 'bytes';
+        if (m) {
+          let a = m[1] === '' ? size - +m[2] : +m[1], b = m[1] !== '' && m[2] !== '' ? Math.min(+m[2], size - 1) : size - 1;
+          if (isNaN(a) || a < 0 || a > b || a >= size) { res.writeHead(416, { 'Content-Range': `bytes */${size}` }); return res.end(); }
+          res.writeHead(206, Object.assign(headers, { 'Content-Range': `bytes ${a}-${b}/${size}`, 'Content-Length': b - a + 1 }));
+          return fs.createReadStream(f, { start: a, end: b }).pipe(res);
+        }
+        headers['Content-Length'] = size;
+      }
+      if (req.method === 'HEAD') { if (!headers['Content-Length']) headers['Content-Length'] = fs.statSync(f).size; res.writeHead(200, headers); return res.end(); }
       res.writeHead(200, headers); return fs.createReadStream(f).pipe(res);
     }
     json(res, 404, { error: 'introuvable' });

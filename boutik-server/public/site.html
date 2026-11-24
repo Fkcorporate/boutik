@@ -162,8 +162,8 @@ footer a{color:#fff;text-decoration:none}
 
 <section class="band white" id="video" style="padding-bottom:0"><div class="w" style="text-align:center">
   <h2>Boutik en 36 secondes</h2>
-  <div class="vid"><video id="vd" src="boutik.mp4" poster="boutik-poster.jpg" autoplay muted loop playsinline preload="metadata"></video>
-    <button class="vsound" id="vsnd" onclick="const v=document.getElementById('vd');v.currentTime=0;v.controls=true;v.play();this.remove()">▶ Revoir depuis le début</button></div>
+  <div class="vid"><video id="vd" muted loop playsinline autoplay preload="auto"></video>
+    <button class="vsound" id="vsnd" type="button">▶ Revoir depuis le début</button></div>
 </div></section>
 
 <section class="band white" id="comment"><div class="w">
@@ -405,6 +405,20 @@ const faq = [
 ];
 document.getElementById('faq').innerHTML = faq.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join('');
 ['q1', 'q2'].forEach((id, k) => { const m = QR.encode(k ? 'P0001-0007' : 'P0002-0012'), n = m.length; let d = ''; for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (m[y][x]) d += `M${x + 4},${y + 4}h1v1h-1z`; const s = document.getElementById(id); s.setAttribute('viewBox', `0 0 ${n + 8} ${n + 8}`); s.innerHTML = `<path d="${d}" fill="#0d0f12"/>`; });
+// Vidéo : lecture directe ; si la page est hébergée dans un cadre qui bloque les fichiers vidéo, on la charge en mémoire (blob).
+(() => {
+  const v = document.getElementById('vd'), b = document.getElementById('vsnd'); let viaBlob = false;
+  const play = () => { v.muted = true; const p = v.play(); if (p && p.catch) p.catch(() => {}); };
+  const blob = async u => URL.createObjectURL(await (await fetch(u)).blob());
+  async function fallback() { if (viaBlob) return; viaBlob = true; try { v.poster = await blob('boutik-poster.jpg'); } catch (e) {} try { v.src = await blob('boutik.mp4'); v.load(); play(); } catch (e) { document.getElementById('video').style.display = 'none'; } }
+  v.addEventListener('error', fallback);
+  v.addEventListener('canplay', play, { once: false });
+  v.poster = 'boutik-poster.jpg'; v.src = 'boutik.mp4'; play();
+  setTimeout(() => { if (v.readyState < 2) fallback(); }, 2500);
+  // Démarre quand la vidéo devient visible, met en pause sinon
+  if ('IntersectionObserver' in window) new IntersectionObserver(es => es.forEach(e => e.isIntersecting ? play() : v.pause()), { threshold: .3 }).observe(v);
+  b.onclick = () => { v.controls = true; if (v.readyState < 2) fallback(); else v.currentTime = 0; play(); b.remove(); };
+})();
 document.getElementById('yr').textContent = new Date().getFullYear();
 const nf = n => Math.round(n || 0).toLocaleString('fr-FR').replace(/[  ]/g, ' ');
 fetch('/api/public').then(r => r.ok ? r.json() : null).then(c => {
