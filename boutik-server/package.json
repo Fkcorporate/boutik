@@ -1,0 +1,10 @@
+{
+  "name": "boutik",
+  "version": "5.1.0",
+  "description": "Caisse, stock et contrôle anti-vol pour petits commerces — serveur de synchronisation",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED",
+  "private": true
+}

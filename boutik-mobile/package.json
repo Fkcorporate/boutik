@@ -1,0 +1,28 @@
+{
+  "name": "boutik-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Boutik — application mobile Android et iPhone (Capacitor)",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "native:setup": "node scripts/native-setup.mjs",
+    "icons": "npx @capacitor/assets generate --android --ios --iconBackgroundColor '#ff5b1f' --splashBackgroundColor '#0d0f12'",
+    "android": "npm run build && npx cap sync android && npx cap open android",
+    "ios": "npm run build && npx cap sync ios && npx cap open ios"
+  },
+  "dependencies": {
+    "@aparajita/capacitor-biometric-auth": "^10.0.0",
+    "@capacitor-community/bluetooth-le": "^8.0.0",
+    "@capacitor-mlkit/barcode-scanning": "^8.0.0",
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/filesystem": "^8.0.0",
+    "@capacitor/ios": "^8.0.0",
+    "@capacitor/share": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.0.0",
+    "esbuild": "^0.25.0"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "appId": "com.boutik.caisse",
+  "appName": "Boutik",
+  "webDir": "www",
+  "backgroundColor": "#f3f4f6",
+  "plugins": {
+    "CapacitorHttp": { "enabled": true },
+    "BluetoothLe": {
+      "displayStrings": {
+        "scanning": "Recherche de l'imprimante…",
+        "cancel": "Annuler",
+        "availableDevices": "Appareils disponibles",
+        "noDeviceFound": "Aucun appareil trouvé"
+      }
+    }
+  }
+}

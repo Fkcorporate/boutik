@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Boutik — Console éditeur</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f3f4f6;--card:#fff;--ink:#0d0f12;--mut:#6b7280;--line:#e7e9ee;--acc:#ff5b1f;--accl:#fff1ea;--ok:#0f9d58;--okl:#e7f6ee;--bad:#e03131;--badl:#fdecec;--warn:#e08600;--warnl:#fff5e0;--sh:0 1px 2px rgba(16,24,40,.04),0 6px 20px rgba(16,24,40,.06)}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Plus Jakarta Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding:18px}
+header{background:var(--ink);color:#fff}
+header .wrap{display:flex;align-items:center;gap:12px;padding-top:14px;padding-bottom:14px}
+header b{font-size:17px;flex:1}header small{opacity:.6;font-weight:600}
+.logo{width:36px;height:36px;border-radius:11px;background:var(--acc);display:flex;align-items:center;justify-content:center}
+h1{font-size:26px;margin:8px 0 16px;letter-spacing:-.02em}
+h3{font-size:13px;color:var(--mut);margin:22px 2px 10px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.kpi{background:var(--card);border-radius:18px;box-shadow:var(--sh);padding:14px 16px}
+.kpi .k{font-size:12.5px;color:var(--mut);font-weight:600}.kpi .v{font-size:22px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums}
+.kpi.dark{background:var(--ink);color:#fff}.kpi.dark .k{color:rgba(255,255,255,.6)}
+.card{background:var(--card);border-radius:20px;box-shadow:var(--sh);padding:16px;margin-bottom:12px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.grow{flex:1}
+.btn{border:0;border-radius:13px;padding:11px 16px;font-weight:700;cursor:pointer;background:var(--ink);color:#fff;min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none}
+.btn.acc{background:var(--acc)}.btn.ok{background:var(--ok)}.btn.bad{background:var(--bad)}.btn.soft{background:#e9ecf2;color:var(--ink)}.btn.sm{min-height:36px;padding:7px 12px;font-size:14px;border-radius:11px}
+input,select,textarea{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:12px;background:#fff;min-height:44px;font-size:15px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--ink)}
+label.f{display:block;font-size:12.5px;font-weight:600;color:var(--mut);margin:10px 2px 5px}
+.chip{border:0;background:var(--card);box-shadow:var(--sh);border-radius:30px;padding:8px 14px;cursor:pointer;font-weight:600;font-size:14px;white-space:nowrap}
+.chip.on{background:var(--ink);color:#fff}
+.pill{display:inline-block;padding:3px 9px;border-radius:30px;font-size:12px;font-weight:700;background:#eef0f4;white-space:nowrap}
+.pill.ok{background:var(--okl);color:var(--ok)}.pill.bad{background:var(--badl);color:var(--bad)}.pill.warn{background:var(--warnl);color:var(--warn)}.pill.acc{background:var(--accl);color:var(--acc)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;color:var(--mut);font-size:12px;font-weight:600;padding:8px;border-bottom:1px solid var(--line)}
+td{padding:11px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr.tap{cursor:pointer}tr.tap:hover td{background:#fafbfc}
+.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.mut{color:var(--mut);font-size:13px}
+.ov{position:fixed;inset:0;background:rgba(13,15,18,.5);z-index:20;display:flex;justify-content:flex-end}
+.drawer{background:var(--bg);width:min(560px,100%);height:100%;overflow:auto;padding:18px}
+.g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--ink);padding:20px}
+.login .card{width:100%;max-width:380px;padding:26px}
+.toast{position:fixed;left:50%;top:18px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 18px;border-radius:14px;font-weight:600;z-index:60}
+.qr{display:flex;justify-content:center;background:#fff;border-radius:16px;padding:16px}
+.code{font-family:ui-monospace,monospace;font-size:12px;word-break:break-all;background:#fff;border-radius:12px;padding:10px;border:1px dashed var(--line)}
+@media(max-width:760px){.hide-m,header small{display:none}.g4{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:22px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+// Mini encodeur QR (mode octet, correction M, versions 1-10)
+const QR = (() => {
+  const ECC_M = [-1, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26];
+  const BLK_M = [-1, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5];
+  function rawModules(v) {
+    let r = (16 * v + 128) * v + 64;
+    if (v >= 2) { const n = Math.floor(v / 7) + 2; r -= (25 * n - 10) * n - 55; if (v >= 7) r -= 36; }
+    return r;
+  }
+  const dataCw = v => Math.floor(rawModules(v) / 8) - ECC_M[v] * BLK_M[v];
+  function mul(x, y) { let z = 0; for (let i = 7; i >= 0; i--) { z = (z << 1) ^ ((z >>> 7) * 0x11D); z ^= ((y >>> i) & 1) * x; } return z & 0xFF; }
+  function divisor(d) { const r = new Array(d).fill(0); r[d - 1] = 1; let root = 1; for (let i = 0; i < d; i++) { for (let j = 0; j < d; j++) { r[j] = mul(r[j], root); if (j + 1 < d) r[j] ^= r[j + 1]; } root = mul(root, 2); } return r; }
+  function remainder(data, div) { const r = div.map(() => 0); for (const b of data) { const f = b ^ r.shift(); r.push(0); div.forEach((c, i) => r[i] ^= mul(c, f)); } return r; }
+  function alignPos(v) {
+    if (v === 1) return [];
+    const n = Math.floor(v / 7) + 2, size = v * 4 + 17;
+    const step = Math.ceil((v * 4 + 4) / (n * 2 - 2)) * 2;
+    const res = [6];
+    for (let p = size - 7; res.length < n; p -= step) res.splice(1, 0, p);
+    return res;
+  }
+  function encode(text) {
+    const bytes = Array.from(new TextEncoder().encode(text));
+    let v = 1;
+    for (; v <= 10; v++) { const cc = v < 10 ? 8 : 16; if (4 + cc + bytes.length * 8 <= dataCw(v) * 8) break; }
+    if (v > 10) throw new Error('Texte trop long pour le QR');
+    const bits = [];
+    const put = (val, n) => { for (let i = n - 1; i >= 0; i--) bits.push((val >>> i) & 1); };
+    put(4, 4); put(bytes.length, v < 10 ? 8 : 16); bytes.forEach(b => put(b, 8));
+    const cap = dataCw(v) * 8;
+    put(0, Math.min(4, cap - bits.length));
+    put(0, (8 - bits.length % 8) % 8);
+    for (let p = 0xEC; bits.length < cap; p ^= 0xEC ^ 0x11) put(p, 8);
+    const data = [];
+    for (let i = 0; i < bits.length; i += 8) { let b = 0; for (let j = 0; j < 8; j++) b = (b << 1) | bits[i + j]; data.push(b); }
+    // ECC + entrelacement
+    const nb = BLK_M[v], el = ECC_M[v], raw = Math.floor(rawModules(v) / 8);
+    const nShort = nb - raw % nb, shortLen = Math.floor(raw / nb);
+    const blocks = [], div = divisor(el);
+    for (let i = 0, k = 0; i < nb; i++) {
+      const dat = data.slice(k, k + shortLen - el + (i < nShort ? 0 : 1)); k += dat.length;
+      const ecc = remainder(dat, div);
+      if (i < nShort) dat.push(0);
+      blocks.push(dat.concat(ecc));
+    }
+    const all = [];
+    for (let i = 0; i < blocks[0].length; i++) blocks.forEach((b, j) => { if (i !== shortLen - el || j >= nShort) all.push(b[i]); });
+    // Matrice
+    const size = v * 4 + 17;
+    const m = [...Array(size)].map(() => Array(size).fill(false));
+    const fn = [...Array(size)].map(() => Array(size).fill(false));
+    const set = (x, y, d) => { m[y][x] = d; fn[y][x] = true; };
+    for (let i = 0; i < size; i++) { set(6, i, i % 2 === 0); set(i, 6, i % 2 === 0); }
+    [[3, 3], [size - 4, 3], [3, size - 4]].forEach(([x, y]) => {
+      for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+        const d = Math.max(Math.abs(dx), Math.abs(dy)), xx = x + dx, yy = y + dy;
+        if (xx >= 0 && xx < size && yy >= 0 && yy < size) set(xx, yy, d !== 2 && d !== 4);
+      }
+    });
+    const ap = alignPos(v), na = ap.length;
+    for (let i = 0; i < na; i++) for (let j = 0; j < na; j++) {
+      if ((i === 0 && j === 0) || (i === 0 && j === na - 1) || (i === na - 1 && j === 0)) continue;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) set(ap[i] + dx, ap[j] + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+    }
+    const drawFormat = mask => {
+      const d = (0 << 3) | mask; let r = d;
+      for (let i = 0; i < 10; i++) r = (r << 1) ^ ((r >>> 9) * 0x537);
+      const b = ((d << 10) | r) ^ 0x5412, g = i => ((b >>> i) & 1) === 1;
+      for (let i = 0; i <= 5; i++) set(8, i, g(i));
+      set(8, 7, g(6)); set(8, 8, g(7)); set(7, 8, g(8));
+      for (let i = 9; i < 15; i++) set(14 - i, 8, g(i));
+      for (let i = 0; i < 8; i++) set(size - 1 - i, 8, g(i));
+      for (let i = 8; i < 15; i++) set(8, size - 15 + i, g(i));
+      set(8, size - 8, true);
+    };
+    drawFormat(0);
+    if (v >= 7) {
+      let r = v; for (let i = 0; i < 12; i++) r = (r << 1) ^ ((r >>> 11) * 0x1F25);
+      const b = (v << 12) | r;
+      for (let i = 0; i < 18; i++) { const bit = ((b >>> i) & 1) === 1, a = size - 11 + i % 3, c = Math.floor(i / 3); set(a, c, bit); set(c, a, bit); }
+    }
+    let idx = 0;
+    for (let right = size - 1; right >= 1; right -= 2) {
+      if (right === 6) right = 5;
+      for (let vert = 0; vert < size; vert++) for (let j = 0; j < 2; j++) {
+        const x = right - j, up = ((right + 1) & 2) === 0, y = up ? size - 1 - vert : vert;
+        if (!fn[y][x] && idx < all.length * 8) { m[y][x] = ((all[idx >>> 3] >>> (7 - (idx & 7))) & 1) === 1; idx++; }
+      }
+    }
+    const maskFn = [
+      (x, y) => (x + y) % 2 === 0, (x, y) => y % 2 === 0, (x) => x % 3 === 0, (x, y) => (x + y) % 3 === 0,
+      (x, y) => (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0, (x, y) => x * y % 2 + x * y % 3 === 0,
+      (x, y) => (x * y % 2 + x * y % 3) % 2 === 0, (x, y) => ((x + y) % 2 + x * y % 3) % 2 === 0];
+    const applyMask = k => { for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (!fn[y][x] && maskFn[k](x, y)) m[y][x] = !m[y][x]; };
+    const penalty = () => {
+      let p = 0, dark = 0;
+      for (let y = 0; y < size; y++) for (let a = 0; a < 2; a++) {
+        let run = 1;
+        for (let x = 1; x < size; x++) {
+          const c = a ? m[x][y] : m[y][x], pr = a ? m[x - 1][y] : m[y][x - 1];
+          if (c === pr) { run++; if (run === 5) p += 3; else if (run > 5) p++; } else run = 1;
+        }
+      }
+      for (let y = 0; y < size - 1; y++) for (let x = 0; x < size - 1; x++) { const c = m[y][x]; if (c === m[y][x + 1] && c === m[y + 1][x] && c === m[y + 1][x + 1]) p += 3; }
+      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (m[y][x]) dark++;
+      p += Math.floor(Math.abs(dark * 20 - size * size * 10) / (size * size)) * 10;
+      return p;
+    };
+    let best = 0, bestP = Infinity;
+    for (let k = 0; k < 8; k++) { applyMask(k); drawFormat(k); const p = penalty(); if (p < bestP) { bestP = p; best = k; } applyMask(k); }
+    applyMask(best); drawFormat(best);
+    return m;
+  }
+  function svg(text, px = 4) {
+    const m = encode(text), n = m.length, q = 2;
+    let d = '';
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (m[y][x]) d += `M${x + q},${y + q}h1v1h-1z`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n + 2 * q} ${n + 2 * q}" width="${(n + 2 * q) * px}" height="${(n + 2 * q) * px}" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+  }
+  return { encode, svg };
+})();
+
+
+{
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nf = n => Math.round(n || 0).toLocaleString('fr-FR').replace(/[  ]/g, ' ');
+const fd = iso => iso ? new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+const ago = iso => { if (!iso) return '—'; const m = (Date.now() - new Date(iso)) / 6e4; return m < 2 ? 'à l\'instant' : m < 60 ? Math.round(m) + ' min' : m < 1440 ? Math.round(m / 60) + ' h' : Math.round(m / 1440) + ' j'; };
+let TOKEN = null; try { TOKEN = sessionStorage.getItem('bk_admin'); } catch (e) {}
+let D = null, filter = 'tous', q = '';
+function toast(t) { const e = document.createElement('div'); e.className = 'toast'; e.textContent = t; document.body.appendChild(e); setTimeout(() => e.remove(), 2400); }
+async function api(path, body, method) {
+  const r = await fetch('/api/admin/' + path, { method: method || (body ? 'POST' : 'GET'), headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (TOKEN || '') }, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401 && path !== 'login') { TOKEN = null; try { sessionStorage.removeItem('bk_admin'); } catch (e) {} loginView(j.error); throw new Error('auth'); }
+  if (!r.ok) throw new Error(j.error || 'Erreur ' + r.status);
+  return j;
+}
+function loginView(msg) {
+  $('app').innerHTML = `<div class="login"><div class="card"><div class="logo" style="margin-bottom:14px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+    <h1 style="margin:0 0 4px">Console éditeur</h1><div class="mut">Accès réservé à l'administrateur de Boutik.</div>
+    <form id="lf"><label class="f">Mot de passe</label><input id="pw" type="password" autocomplete="current-password" autofocus>
+    <div id="lerr" class="mut" style="color:var(--bad);margin-top:8px">${esc(msg || '')}</div>
+    <button class="btn acc" style="width:100%;margin-top:12px">Se connecter</button></form></div></div>`;
+  $('lf').onsubmit = async e => { e.preventDefault(); try { const j = await api('login', { password: $('pw').value }); TOKEN = j.token; try { sessionStorage.setItem('bk_admin', TOKEN); } catch (x) {} load(); } catch (x) { if (x.message !== 'auth') $('lerr').textContent = x.message; } };
+}
+async function load() { try { D = await api('shops'); main(); } catch (e) { if (e.message !== 'auth') { if (/désactivée/.test(e.message)) return loginView(e.message); toast(e.message); } } }
+const monthStart = () => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d.toISOString(); };
+function statusPill(sh) { const s = sh.sub; const c = s.status === 'suspendu' || s.status === 'expiré' ? 'bad' : s.status === 'délai de grâce' || s.daysLeft <= 7 ? 'warn' : s.status === 'essai' ? 'acc' : 'ok'; return `<span class="pill ${c}">${s.status}${s.daysLeft >= 0 && s.status !== 'suspendu' ? ' · ' + s.daysLeft + ' j' : ''}</span>`; }
+function pass(sh) {
+  const s = sh.sub, active = sh.lastSeen && Date.now() - new Date(sh.lastSeen) < 7 * 864e5;
+  if (filter === 'actives' && !active) return false;
+  if (filter === 'essai' && s.status !== 'essai') return false;
+  if (filter === 'bientot' && !(s.daysLeft >= 0 && s.daysLeft <= 7 && !s.blocked)) return false;
+  if (filter === 'bloquees' && !s.blocked && s.status !== 'délai de grâce') return false;
+  const t = q.toLowerCase(); if (t && !(sh.stats.shopName + ' ' + sh.stats.owner + ' ' + (sh.info.client || '') + ' ' + (sh.info.phone || '') + ' ' + (sh.info.city || '') + ' ' + sh.id).toLowerCase().includes(t)) return false;
+  return true;
+}
+function main() {
+  const L = D.shops, ms = monthStart(), cur = D.config.currency;
+  const rev = L.flatMap(s => s.pays), revM = rev.filter(p => p.date >= ms).reduce((a, p) => a + p.amount, 0), revT = rev.reduce((a, p) => a + p.amount, 0);
+  const act = L.filter(s => s.lastSeen && Date.now() - new Date(s.lastSeen) < 7 * 864e5).length;
+  const soon = L.filter(s => s.sub.daysLeft >= 0 && s.sub.daysLeft <= 7 && !s.sub.blocked).length, blk = L.filter(s => s.sub.blocked).length;
+  const list = L.filter(pass).sort((a, b) => (b.lastSeen || '').localeCompare(a.lastSeen || ''));
+  $('app').innerHTML = `<header><div class="wrap"><div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l2-5h14l2 5M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0zM5 13v8h14v-8"/></svg></div><b>Boutik <small>· console éditeur</small></b>
+    <button class="btn soft sm" onclick="BK.settings()">Réglages</button><button class="btn soft sm" onclick="BK.logout()">Déconnexion</button></div></header>
+    <div class="wrap"><h1>Vos boutiques clientes</h1>
+    <div class="kpis">
+      <div class="kpi dark"><div class="k">Revenus ce mois</div><div class="v">${nf(revM)} ${esc(cur)}</div></div>
+      <div class="kpi"><div class="k">Revenus total</div><div class="v">${nf(revT)}</div></div>
+      <div class="kpi"><div class="k">Boutiques</div><div class="v">${L.length}</div></div>
+      <div class="kpi"><div class="k">Actives (7 jours)</div><div class="v">${act}</div></div>
+      <div class="kpi" style="${soon ? 'background:var(--warnl)' : ''}"><div class="k">Expirent sous 7 j</div><div class="v">${soon}</div></div>
+      <div class="kpi" style="${blk ? 'background:var(--badl)' : ''}"><div class="k">Bloquées</div><div class="v">${blk}</div></div>
+    </div>
+    <div class="row" style="margin:18px 0 10px">${[['tous', 'Toutes'], ['actives', 'Actives'], ['essai', 'En essai'], ['bientot', 'Expirent bientôt'], ['bloquees', 'Bloquées / en retard']].map(([k, l]) => `<button class="chip ${filter === k ? 'on' : ''}" onclick="BK.f('${k}')">${l}</button>`).join('')}
+      <input id="q" class="grow" style="min-width:200px;max-width:340px;margin-left:auto" placeholder="Chercher : boutique, client, ville, téléphone" value="${esc(q)}"><button class="btn soft sm" onclick="BK.csv()">Export Excel</button></div>
+    <div class="card" style="padding:6px 10px;overflow-x:auto">${list.length ? `<table><tr><th>Boutique</th><th class="hide-m">Client</th><th>Abonnement</th><th class="hide-m">Dernière activité</th><th class="n hide-m">Ventes 30 j</th><th class="n hide-m">Tél.</th></tr>
+      ${list.map(s => `<tr class="tap" onclick="BK.open('${s.id}')"><td><b>${esc(s.stats.shopName)}</b><div class="mut">${esc(s.info.city || s.stats.contact || '')}</div></td><td class="hide-m">${esc(s.info.client || s.stats.owner)}<div class="mut">${esc(s.info.phone || s.stats.ownerPhone || '')}</div></td>
+        <td>${statusPill(s)}<div class="mut">jusqu'au ${fd(s.sub.until)}</div></td><td class="hide-m">${ago(s.lastSeen)}</td><td class="n hide-m">${s.stats.sales30}<div class="mut">${nf(s.stats.ca30)} ${esc(s.stats.currency)}</div></td><td class="n hide-m">${s.stats.devices}</td></tr>`).join('')}</table>`
+      : `<div class="mut" style="text-align:center;padding:30px">${L.length ? 'Aucune boutique pour ce filtre' : 'Aucune boutique pour l\'instant. Elles apparaissent ici dès qu\'un commerçant met sa boutique en ligne.'}</div>`}</div>
+    <div class="mut">Essai gratuit : ${D.trialDays} jours · délai de grâce après expiration : ${D.graceDays} jours · contact affiché aux clients : ${esc(D.support || 'non défini (SUPPORT_CONTACT)')}</div></div>`;
+  const qi = $('q'); qi.oninput = () => { q = qi.value; const pos = qi.selectionStart; main(); const n = $('q'); n.focus(); n.setSelectionRange(pos, pos); };
+}
+function drawer(html) { closeD(); const o = document.createElement('div'); o.className = 'ov'; o.id = 'ov'; o.innerHTML = `<div class="drawer">${html}</div>`; o.onclick = e => { if (e.target === o) closeD(); }; document.body.appendChild(o); }
+function closeD() { $('ov')?.remove(); }
+function shop(id) { return D.shops.find(s => s.id === id); }
+function open(id) {
+  const s = shop(id), st = s.stats, price = D.config.price, cur = D.config.currency;
+  const remind = `Bonjour ${st.owner || ''}, votre abonnement Boutik pour « ${st.shopName} » ${s.sub.daysLeft >= 0 ? 'expire le ' + fd(s.sub.until) : 'a expiré le ' + fd(s.sub.until)}. Pour continuer : ${nf(price)} ${cur} par mois. Merci !`;
+  const phone = (s.info.phone || st.ownerPhone || '').replace(/\D/g, '');
+  drawer(`<div class="row"><h1 class="grow" style="margin:0">${esc(st.shopName)}</h1><button class="btn soft sm" onclick="BK.close()">Fermer</button></div>
+    <div class="mut" style="margin:4px 0 14px">Créée le ${fd(s.created)} · dernière activité ${ago(s.lastSeen)} · n° ${s.id}</div>
+    <div class="card"><div class="row"><div class="grow"><div class="mut">Abonnement</div><div style="font-size:20px;font-weight:800">${statusPill(s)} <span style="font-size:15px">jusqu'au ${fd(s.sub.until)}</span></div></div>
+      <button class="btn sm ${s.plan.suspended ? 'ok' : 'soft'}" onclick="BK.suspend('${id}',${!s.plan.suspended})">${s.plan.suspended ? 'Réactiver' : 'Suspendre'}</button></div>
+      <h3 style="margin-top:16px">Enregistrer un paiement</h3>
+      <div class="g4">${[1, 3, 6, 12].map(m => `<button class="btn soft sm mo" data-m="${m}" onclick="BK.pickM(${m})">${m} mois</button>`).join('')}</div>
+      <div class="g2"><div><label class="f">Montant reçu (${esc(cur)})</label><input id="pa" inputmode="numeric" value="${price}"></div><div><label class="f">Moyen</label><select id="pm"><option>Mobile Money</option><option>Espèces</option><option>Virement</option><option>Autre</option></select></div></div>
+      <label class="f">Note</label><input id="pn" placeholder="Ex : réf. Wave, payé par le gérant">
+      <button class="btn ok" style="width:100%;margin-top:12px" onclick="BK.extend('${id}')">Valider : +<span id="pmo">1</span> mois</button>
+      <div class="row" style="margin-top:10px"><input id="td" inputmode="numeric" placeholder="Jours offerts" style="max-width:140px"><button class="btn soft sm" onclick="BK.trial('${id}')">Offrir des jours d'essai</button></div>
+      ${phone ? `<a class="btn soft sm" style="margin-top:10px" target="_blank" rel="noopener" href="https://wa.me/${phone}?text=${encodeURIComponent(remind)}">Relancer sur WhatsApp</a>` : ''}</div>
+    <div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="kpi"><div class="k">Ventes 30 j</div><div class="v">${st.sales30}</div></div><div class="kpi"><div class="k">Chiffre 30 j</div><div class="v">${nf(st.ca30)}</div></div><div class="kpi"><div class="k">Téléphones</div><div class="v">${st.devices}</div></div>
+      <div class="kpi"><div class="k">Produits</div><div class="v">${st.products}</div></div><div class="kpi"><div class="k">Vendeurs</div><div class="v">${st.employees}</div></div><div class="kpi"><div class="k">Dernière vente</div><div class="v" style="font-size:16px">${ago(st.lastSale)}</div></div></div>
+    <h3>Fiche client</h3><div class="card">
+      <div class="g2"><div><label class="f" style="margin-top:0">Nom du client</label><input id="ic" value="${esc(s.info.client || st.owner)}"></div><div><label class="f" style="margin-top:0">Téléphone / WhatsApp</label><input id="ip" value="${esc(s.info.phone || st.ownerPhone)}"></div></div>
+      <label class="f">Ville / quartier</label><input id="iv" value="${esc(s.info.city || '')}"><label class="f">Notes</label><textarea id="in" rows="3">${esc(s.info.note || '')}</textarea>
+      <button class="btn" style="margin-top:10px" onclick="BK.info('${id}')">Enregistrer la fiche</button></div>
+    <h3>Paiements reçus</h3><div class="card" style="padding:6px 12px">${s.pays.length ? `<table>${s.pays.map(p => `<tr><td>${fd(p.date)}<div class="mut">${esc(p.method)}${p.note ? ' · ' + esc(p.note) : ''}</div></td><td>${p.months ? p.months + ' mois' : ''}${p.days ? p.days + ' j' : ''}</td><td class="n"><b>${nf(p.amount)}</b></td><td class="n"><button class="btn soft sm" onclick="BK.unpay('${id}','${p.id}')">✕</button></td></tr>`).join('')}</table>` : '<div class="mut" style="padding:14px">Aucun paiement</div>'}</div>
+    <h3>Téléphones connectés</h3><div class="card" style="padding:6px 12px">${Object.keys(s.devicesList).length ? `<table>${Object.entries(s.devicesList).map(([d, x]) => `<tr><td><b>${esc(d.slice(0, 8))}</b><div class="mut">${esc(x.ua)}</div></td><td class="n">${ago(x.seen)}</td></tr>`).join('')}</table>` : '<div class="mut" style="padding:14px">Aucun</div>'}</div>
+    <h3>Sécurité</h3><div class="card"><div class="mut">Si le client a perdu un téléphone ou si son code de jumelage a circulé : créez un nouveau code. Tous les téléphones sont déconnectés et doivent rejoindre la boutique avec le nouveau code. Rien n'est perdu.</div>
+      <button class="btn bad" style="margin-top:12px" onclick="BK.rekey('${id}')">Créer un nouveau code de jumelage</button><div id="newcode"></div></div>`);
+}
+let pickedM = 1;
+const BK = window.BK = {
+  f(k) { filter = k; main(); }, open, close: closeD,
+  pickM(m) { pickedM = m; document.querySelectorAll('.mo').forEach(b => { b.classList.toggle('acc', +b.dataset.m === m); b.classList.toggle('soft', +b.dataset.m !== m); }); $('pa').value = D.config.price * m; $('pmo').textContent = m; },
+  async act(id, what, body, msg) { try { const j = await api(`shop/${id}/${what}`, body); const i = D.shops.findIndex(s => s.id === id); D.shops[i] = j.shop; if (msg) toast(msg); return j; } catch (e) { if (e.message !== 'auth') toast(e.message); } },
+  async extend(id) { const j = await BK.act(id, 'extend', { months: pickedM, amount: +$('pa').value || 0, method: $('pm').value, note: $('pn').value }, 'Paiement enregistré'); if (j) { main(); open(id); } },
+  async trial(id) { const d = +$('td').value; if (!d) return toast('Nombre de jours ?'); const j = await BK.act(id, 'extend', { days: d, trial: true }, d + ' jours offerts'); if (j) { main(); open(id); } },
+  async suspend(id, on) { if (on && !confirmIn('Suspendre cette boutique ? Ses téléphones continuent de vendre mais ne se synchronisent plus.')) return; const j = await BK.act(id, 'suspend', { on }, on ? 'Boutique suspendue' : 'Boutique réactivée'); if (j) { main(); open(id); } },
+  async info(id) { const j = await BK.act(id, 'info', { client: $('ic').value, phone: $('ip').value, city: $('iv').value, note: $('in').value }, 'Fiche enregistrée'); if (j) main(), open(id); },
+  async unpay(id, pid) { if (!confirmIn('Supprimer ce paiement de l\'historique ? (la date d\'expiration ne change pas)')) return; const j = await BK.act(id, 'unpay', { id: pid }, 'Paiement supprimé'); if (j) { main(); open(id); } },
+  async rekey(id) { if (!confirmIn('Créer un nouveau code ? Tous les téléphones de cette boutique devront se reconnecter.')) return; const j = await BK.act(id, 'rekey', {}); if (j && j.code) { main(); open(id); $('newcode').innerHTML = `<div class="qr" style="margin-top:12px">${QR.svg(j.code, 5)}</div><div class="code" style="margin-top:8px">${esc(j.code)}</div><div class="mut" style="margin-top:6px">Sur le téléphone du client : « Rejoindre ma boutique » puis scanner ce code.</div>`; } },
+  settings() { drawer(`<div class="row"><h1 class="grow" style="margin:0">Réglages</h1><button class="btn soft sm" onclick="BK.close()">Fermer</button></div>
+    <div class="card" style="margin-top:14px"><div class="g2"><div><label class="f" style="margin-top:0">Prix par mois</label><input id="cp" inputmode="numeric" value="${D.config.price}"></div><div><label class="f" style="margin-top:0">Monnaie</label><input id="cc" value="${esc(D.config.currency)}"></div></div>
+    <h3>Site public et stores</h3>
+    <label class="f">Lien Google Play (vide = « bientôt »)</label><input id="cpl" value="${esc(D.config.playUrl || '')}" placeholder="https://play.google.com/store/apps/details?id=…">
+    <label class="f">Lien App Store (vide = « bientôt »)</label><input id="cas" value="${esc(D.config.appStoreUrl || '')}" placeholder="https://apps.apple.com/…">
+    <div class="g2"><div><label class="f">WhatsApp commercial</label><input id="cwa" value="${esc(D.config.whatsapp || '')}" placeholder="2250700000000"></div><div><label class="f">E-mail de contact</label><input id="cem" value="${esc(D.config.email || '')}"></div></div>
+    <label class="f">Éditeur (nom de la société, affiché sur le site et la politique de confidentialité)</label><input id="ced" value="${esc(D.config.editor || '')}">
+    <button class="btn" style="margin-top:12px" onclick="BK.saveCfg()">Enregistrer</button></div>
+    <div class="card mut">Réglés sur Render (variables d'environnement) : essai gratuit <b>TRIAL_DAYS</b> = ${D.trialDays} j · délai de grâce <b>GRACE_DAYS</b> = ${D.graceDays} j · contact affiché aux clients <b>SUPPORT_CONTACT</b> = ${esc(D.support || '—')} · mot de passe <b>ADMIN_PASSWORD</b>.</div>`); },
+  async saveCfg() { try { const j = await api('config', { price: +$('cp').value || 0, currency: $('cc').value, playUrl: $('cpl').value, appStoreUrl: $('cas').value, whatsapp: $('cwa').value, email: $('cem').value, editor: $('ced').value }); D.config = j.config; toast('Réglages enregistrés'); closeD(); main(); } catch (e) { if (e.message !== 'auth') toast(e.message); } },
+  async logout() { try { await api('logout', {}); } catch (e) {} TOKEN = null; try { sessionStorage.removeItem('bk_admin'); } catch (e) {} loginView(); },
+  csv() { const rows = [['Boutique', 'Client', 'Téléphone', 'Ville', 'Statut', 'Expire le', 'Dernière activité', 'Ventes 30j', 'CA 30j', 'Payé total', 'Créée le', 'N°']]; D.shops.forEach(s => rows.push([s.stats.shopName, s.info.client || s.stats.owner, s.info.phone || s.stats.ownerPhone, s.info.city || '', s.sub.status, fd(s.sub.until), s.lastSeen ? new Date(s.lastSeen).toLocaleString('fr-FR') : '', s.stats.sales30, s.stats.ca30, s.pays.reduce((a, p) => a + p.amount, 0), fd(s.created), s.id]));
+    const t = '﻿' + rows.map(r => r.map(x => `"${String(x ?? '').replace(/"/g, '""')}"`).join(';')).join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([t], { type: 'text/csv' })); a.download = 'boutik-clients.csv'; a.click(); }
+};
+function confirmIn(t) { try { return window.confirm(t); } catch (e) { return true; } }
+TOKEN ? load() : loginView();
+}
+</script>
+</body>
+</html>

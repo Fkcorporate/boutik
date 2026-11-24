@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boutik — Politique de confidentialité</title>
+<link rel="icon" href="/icon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f6f6f4;color:#0d0f12;font:17px/1.65 "Plus Jakarta Sans",system-ui,sans-serif}
+header{background:#0d0f12;color:#fff;padding:18px max(5vw,18px)}header a{color:#fff;text-decoration:none;font-weight:800}
+main{max-width:760px;margin:0 auto;padding:36px max(5vw,18px) 60px}
+h1{font-size:34px;line-height:1.1;letter-spacing:-.02em;margin:0 0 8px}
+h2{font-size:21px;margin:32px 0 8px}
+p,li{color:#2a2f37}.mut{color:#6b7280;font-size:15px}
+ul{padding-left:22px}
+</style>
+</head>
+<body>
+<header><a href="/">← Boutik</a></header>
+<main>
+<h1>Politique de confidentialité</h1>
+<p class="mut">Application Boutik (web, Android et iPhone) · éditeur : <span class="ed">l'éditeur de Boutik</span> · mise à jour : novembre 2026</p>
+
+<h2>En bref</h2>
+<p>Boutik sert à gérer la caisse, le stock et les vendeurs d'une boutique. Les données appartiennent au commerçant. Nous ne les vendons pas, nous ne faisons pas de publicité et nous ne les utilisons pas à d'autres fins que le fonctionnement du service.</p>
+
+<h2>Données traitées</h2>
+<ul>
+<li><b>Données de la boutique :</b> nom, contact, produits, prix, stock, ventes, dépenses, crédits clients et fournisseurs, saisis par le commerçant et ses vendeurs.</li>
+<li><b>Données des vendeurs :</b> prénom, code d'accès et historique de leurs actions dans l'application (journal), pour le contrôle par le propriétaire.</li>
+<li><b>Données des clients de la boutique :</b> uniquement si le commerçant les saisit (nom et téléphone pour une vente à crédit).</li>
+<li><b>Données techniques :</b> identifiant de l'appareil propre à Boutik, type de navigateur ou de téléphone et date de dernière synchronisation, pour la sécurité et le support.</li>
+</ul>
+
+<h2>Où sont-elles conservées ?</h2>
+<p>D'abord sur le téléphone de la boutique. Si le commerçant active le suivi à distance, une copie est envoyée sur notre serveur, protégée par une clé propre à chaque boutique, pour la synchroniser avec ses autres téléphones et la sauvegarder.</p>
+
+<h2>Caméra, Bluetooth, visage et empreinte</h2>
+<ul>
+<li><b>Caméra :</b> utilisée uniquement pour lire les étiquettes et codes-barres, et pour les photos de produits que le commerçant choisit de prendre. Aucune autre image n'est enregistrée.</li>
+<li><b>Bluetooth :</b> utilisé uniquement pour imprimer sur une imprimante de tickets. Boutik ne l'utilise pas pour localiser l'appareil.</li>
+<li><b>Visage ou empreinte :</b> la vérification est faite par le téléphone lui-même. Boutik ne voit et ne conserve jamais ces données.</li>
+</ul>
+
+<h2>Assistant</h2>
+<p>L'assistant de Boutik répond d'abord avec les données présentes sur le téléphone, sans rien envoyer. Si le commerçant active l'option « Assistant IA en ligne », les questions auxquelles il ne sait pas répondre sont envoyées, avec un résumé chiffré de la boutique (ventes, stock, soldes, sans les codes d'accès), à notre serveur puis à un fournisseur d'intelligence artificielle, uniquement pour produire la réponse.</p>
+
+<h2>Partage</h2>
+<p>Les données ne sont partagées avec personne, sauf l'hébergeur technique du serveur, tenu à la confidentialité, ou une autorité si la loi l'exige. Les messages WhatsApp (reçus, relances, bilans) ne sont envoyés que lorsque l'utilisateur appuie lui-même sur le bouton.</p>
+
+<h2>Durée de conservation</h2>
+<p>Les données sont conservées tant que la boutique utilise le service. Le commerçant peut à tout moment exporter ses données, les effacer de son téléphone ou demander la suppression de sa boutique sur notre serveur.</p>
+
+<h2>Vos droits</h2>
+<p>Vous pouvez demander l'accès, la correction ou la suppression de vos données en nous écrivant<span class="mailw"></span>. Les vendeurs et clients d'une boutique peuvent s'adresser au commerçant, ou à nous.</p>
+
+<h2>Sécurité</h2>
+<p>Connexions chiffrées (https), clé secrète par boutique, codes d'accès par utilisateur, journal de toutes les actions et console d'administration protégée par mot de passe.</p>
+</main>
+<script>
+fetch('/api/public').then(r => r.ok ? r.json() : null).then(c => {
+  if (!c) return;
+  if (c.editor) document.querySelectorAll('.ed').forEach(e => e.textContent = c.editor);
+  if (c.email) { const s = document.querySelector('.mailw'); s.append(' à '); const a = document.createElement('a'); a.href = 'mailto:' + c.email; a.textContent = c.email; s.appendChild(a); }
+}).catch(() => {});
+</script>
+</body>
+</html>
