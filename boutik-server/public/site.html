@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Boutik — La caisse anti-vol</title>
+<title>Boutik — Votre boutique sous contrôle</title>
 <meta name="description" content="Boutik : caisse, stock et contrôle des vendeurs pour les commerces. Étiquettes QR, scan, Mobile Money, hors connexion. Essai gratuit.">
 <meta name="theme-color" content="#0d0f12">
 <link rel="icon" href="/icon.svg">
@@ -78,6 +78,9 @@ h2{font-size:clamp(30px,4vw,44px);line-height:1.08;letter-spacing:-.025em;margin
 .step h3,.feat h3{margin:0 0 6px;font-size:19px;letter-spacing:-.01em}
 .step p,.feat p{margin:0;color:var(--mut);font-size:16px}
 .feats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.vid{position:relative;margin:28px auto 0;max-width:1080px;border-radius:28px;overflow:hidden;box-shadow:0 30px 80px rgba(16,24,40,.18);background:#0d0f12;aspect-ratio:16/9}
+.vid video{width:100%;height:100%;display:block;object-fit:cover}
+.vsound{position:absolute;left:18px;bottom:18px;border:0;border-radius:30px;padding:12px 20px;font:inherit;font-weight:700;background:rgba(255,255,255,.92);color:#0d0f12;cursor:pointer}
 .feat{background:var(--card);border-radius:22px;padding:22px;box-shadow:0 1px 2px rgba(16,24,40,.04),0 8px 24px rgba(16,24,40,.05)}
 .ico{width:46px;height:46px;border-radius:14px;background:var(--accl);color:var(--acc);display:flex;align-items:center;justify-content:center;margin-bottom:14px}
 .split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:48px;align-items:center}
@@ -119,14 +122,14 @@ footer a{color:#fff;text-decoration:none}
 <body>
 <nav><div class="w">
   <a class="brand" href="#top"><span class="logo"><svg class="i" viewBox="0 0 24 24" style="width:20px;height:20px;color:#fff"><path d="M3 9l2-5h14l2 5M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0zM5 13v8h14v-8"/></svg></span>Boutik</a>
-  <div class="links"><a href="#comment">Comment ça marche</a><a href="#fonctions">Fonctions</a><a href="#tarif">Tarif</a><a href="#questions">Questions</a></div>
+  <div class="links"><a href="#comment">Comment ça marche</a><a href="#fonctions">Fonctions</a><a href="#tarif">Tarif</a><a href="#materiel" id="navHw" style="display:none">Matériel</a><a href="#questions">Questions</a></div>
   <a class="btn acc sm" href="/app/">Essayer</a>
 </div></nav>
 
 <header class="hero" id="top"><div class="w">
   <div>
     <span class="eyebrow">Caisse · Stock · Contrôle des vendeurs · <b>même sans internet</b></span>
-    <h1>La caisse qui protège votre boutique <em>contre les vols</em>.</h1>
+    <h1>Votre boutique sous contrôle, <em>même quand vous n'êtes pas là</em>.</h1>
     <p class="lead">Vos vendeurs scannent, encaissent et comptent leur caisse. Vous voyez chaque vente, chaque écart et chaque article manquant, depuis votre téléphone, où que vous soyez.</p>
     <div class="ctas"><a class="btn acc" href="/app/" id="ctaTry">Essayer gratuitement 30 jours</a><a class="btn ghost" id="ctaWa" href="#questions" target="_blank" rel="noopener"><svg class="i" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-13.4 7.9L3 21l1.2-4.4A9 9 0 1 1 21 12z"/></svg>Parler à un conseiller</a></div>
     <div class="stores">
@@ -156,6 +159,12 @@ footer a{color:#fff;text-decoration:none}
     </div>
   </div>
 </div></header>
+
+<section class="band white" id="video" style="padding-bottom:0"><div class="w" style="text-align:center">
+  <h2>Boutik en 36 secondes</h2>
+  <div class="vid"><video id="vd" src="boutik.mp4" poster="boutik-poster.jpg" autoplay muted loop playsinline preload="metadata"></video>
+    <button class="vsound" id="vsnd" onclick="const v=document.getElementById('vd');v.currentTime=0;v.controls=true;v.play();this.remove()">▶ Revoir depuis le début</button></div>
+</div></section>
 
 <section class="band white" id="comment"><div class="w">
   <h2>Trois gestes, et chaque franc est suivi.</h2>
@@ -365,7 +374,7 @@ const feats = [
   ['scan', 'Étiquettes QR uniques', 'Une étiquette ne peut jamais être comptée deux fois. Vous pouvez même interdire la vente sans scan.'],
   ['eye', 'Ventes suspectes signalées', 'Saisies à la main, remises, ventes à perte, Mobile Money sans référence : tout ressort en couleur.'],
   ['phone', 'Mobile Money vérifié', 'Collez vos SMS de paiement : Boutik retrouve les ventes payées… et celles qui ne l\'ont pas été.'],
-  ['box', 'Recensement par la caméra', 'Filmez votre rayon, Boutik compte les étiquettes visibles et vous donne la valeur de ce qui manque.']
+  ['box', 'Recensement par la caméra', 'Filmez votre rayon : Boutik affiche en direct combien d\'articles il voit, compte les étiquettes visibles et vous donne la valeur de ce qui manque.']
 ];
 document.getElementById('feats').innerHTML = feats.map(([i, t, d]) => `<div class="feat"><div class="ico">${ic(i)}</div><h3>${t}</h3><p>${d}</p></div>`).join('');
 const local = [
@@ -387,6 +396,11 @@ const faq = [
   ['Comment le vendeur ne peut-il pas tricher ?', 'Chaque action est enregistrée à son nom avec l\'heure. Il ne voit ni les prix d\'achat, ni l\'argent attendu dans sa caisse. Les remises, baisses de prix et annulations demandent votre code. Les étiquettes uniques empêchent de compter deux fois le même article.'],
   ['Comment imprimer les étiquettes ?', 'Sur une imprimante ordinaire (feuille A4 autocollante à découper), ou sur une mini-imprimante Bluetooth de tickets que l\'on trouve facilement sur les marchés.'],
   ['Mes données sont-elles en sécurité ?', 'Elles restent sur le téléphone de la boutique et sur notre serveur, protégées par une clé propre à votre boutique. Nous ne les vendons jamais et ne faisons pas de publicité. Voir notre politique de confidentialité.'],
+  ['Et les articles sans étiquette ?', 'Ceux qui ont un code-barres d\'usine se scannent directement. Pour le reste, l\'option comptage par photo (IA) estime le nombre d\'articles visibles sur une photo de votre rayon. Elle ne voit pas ce qui est caché derrière ou dans un carton fermé : pour les articles chers, gardez l\'étiquette QR.'],
+  ['Mes clients peuvent-ils payer avec Wave ?', 'Oui. Enregistrez une fois le QR de votre compte Wave marchand : à chaque vente, le vendeur le montre au client avec le montant. Le paiement est noté dans la caisse et vous pouvez le vérifier avec vos SMS.'],
+  ['Ça marche sur ordinateur ?', 'Oui. Sur ordinateur, Boutik s\'ouvre dans le navigateur en grand écran, avec le menu à gauche. Un bouton permet de passer en version mobile.'],
+  ['Puis-je payer à l\'année ?', 'Oui, l\'abonnement annuel revient moins cher que 12 mois. Si vous avez un code promo, saisissez-le dans l\'appli (Paramètres → Mon abonnement) ou donnez-le à notre équipe.'],
+  ['Combien de vendeurs et de produits ?', 'Autant que vous voulez : vendeurs, produits et ventes sont illimités. Chaque vendeur a son code et peut avoir sa propre langue.'],
   ['Et si j\'arrête de payer ?', 'Vos ventes restent sur votre téléphone, rien n\'est effacé. Seule la synchronisation avec les autres téléphones s\'arrête.']
 ];
 document.getElementById('faq').innerHTML = faq.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join('');
@@ -401,7 +415,7 @@ fetch('/api/public').then(r => r.ok ? r.json() : null).then(c => {
   if (c.priceYear) { document.getElementById('year').textContent = nf(c.priceYear) + ' ' + cu; const sv = c.price * 12 - c.priceYear; if (sv > 0) document.getElementById('ysave').textContent = '(' + nf(sv) + ' ' + cu + ' économisés)'; } else document.getElementById('year').parentNode.style.display = 'none';
   if (!c.promo) document.getElementById('promoTxt').style.display = 'none';
   const hw = c.hardware || [], wa0 = String(c.whatsapp || '').replace(/\D/g, '');
-  if (hw.length) { document.getElementById('materiel').style.display = ''; const E = x => String(x || '').replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[m]);
+  if (hw.length) { document.getElementById('materiel').style.display = ''; document.getElementById('navHw').style.display = ''; const E = x => String(x || '').replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[m]);
     document.getElementById('hw').innerHTML = hw.map(h => `<div class="feat">${/^https:\/\//.test(h.img || '') ? `<img src="${E(h.img)}" alt="" style="width:100%;height:160px;object-fit:cover;border-radius:16px;margin-bottom:12px">` : ''}<h3>${E(h.name)}</h3><p>${E(h.desc)}</p><p style="font-weight:800;color:var(--ink)">${h.price ? nf(h.price) + ' ' + E(cu) : 'Prix sur demande'}</p>${wa0 ? `<a class="btn acc" target="_blank" rel="noopener" href="https://wa.me/${wa0}?text=${encodeURIComponent('Bonjour, je voudrais commander : ' + h.name)}">Commander</a>` : ''}</div>`).join(''); } document.getElementById('trial').textContent = c.trialDays || 30;
   document.getElementById('ctaTry').textContent = `Essayer gratuitement ${c.trialDays || 30} jours`;
   const wa = String(c.whatsapp || '').replace(/\D/g, '');
