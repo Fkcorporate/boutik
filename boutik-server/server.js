@@ -44,7 +44,14 @@ function persist() {
   dirty.clear();
 }
 const CFG_F = path.join(DATA, '_config.json');
-let CFG = Object.assign({ price: 5000, currency: 'FCFA', playUrl: '', appStoreUrl: '', whatsapp: '', email: '', editor: '' }, fs.existsSync(CFG_F) ? JSON.parse(fs.readFileSync(CFG_F, 'utf8')) : {});
+const CFG_DEF = { priceList: 25000, price: 20000, priceYear: 200000, currency: 'FCFA', playUrl: '', appStoreUrl: '', whatsapp: '', email: '', editor: '',
+  promos: [{ code: 'BIENVENUE', off: 5000, per: 'mois', active: true, until: '', max: 0, uses: 0, note: 'Remise de lancement' }],
+  hardware: [
+    { id: 'h1', name: 'Imprimante d\'étiquettes Bluetooth 58 mm', price: 0, desc: 'Imprime les étiquettes QR et les reçus depuis le téléphone. Sans encre (thermique).', active: true },
+    { id: 'h2', name: 'Rouleaux d\'étiquettes autocollantes 40 × 30 mm', price: 0, desc: 'Lot de rouleaux adhésifs pour coller les QR sur les articles.', active: true },
+    { id: 'h3', name: 'Rouleaux de tickets 58 mm', price: 0, desc: 'Pour imprimer les reçus clients.', active: true }] };
+let CFG = Object.assign({}, CFG_DEF, fs.existsSync(CFG_F) ? JSON.parse(fs.readFileSync(CFG_F, 'utf8')) : {});
+if (!CFG.priceYear) CFG.priceYear = CFG.price * 10;
 const saveCfg = () => fs.writeFileSync(CFG_F, JSON.stringify(CFG));
 setInterval(persist, 2000);
 ['SIGTERM', 'SIGINT'].forEach(sig => process.on(sig, () => { persist(); process.exit(0); }));
@@ -54,8 +61,24 @@ function subState(s) {
   const until = new Date(s.plan.until).getTime(), left = Math.ceil((until - Date.now()) / DAY);
   const blocked = s.plan.suspended || Date.now() > until + GRACE_DAYS * DAY;
   const status = s.plan.suspended ? 'suspendu' : left < 0 ? (blocked ? 'expiré' : 'délai de grâce') : s.plan.status;
-  return { until: s.plan.until, daysLeft: left, blocked, status, support: SUPPORT };
+  return { until: s.plan.until, daysLeft: left, blocked, status, support: SUPPORT, tarif: tariff(s) };
 }
+/* ---------- tarifs et codes promo ---------- */
+function promoValid(code) {
+  const c = String(code || '').trim().toUpperCase(); if (!c) return null;
+  const x = (CFG.promos || []).find(p => p.code === c);
+  if (!x || !x.active || (x.until && Date.now() > new Date(x.until).getTime() + DAY) || (x.max > 0 && x.uses >= x.max)) return null;
+  return x;
+}
+// Prix d'une période pour une boutique : mensuel ou annuel, remise du code promo comprise.
+function tariff(s) {
+  const cycle = s.plan.cycle === 'an' ? 'an' : 'mois', months = cycle === 'an' ? 12 : 1;
+  const base = cycle === 'an' ? CFG.priceYear : CFG.price, list = (CFG.priceList || CFG.price) * months;
+  const p = promoValid(s.plan.promo), off = p ? (p.per === 'once' ? p.off : p.off * months) : 0;
+  return { cycle, months, list, base, promo: p ? p.code : '', off: Math.min(off, base), due: Math.max(0, base - off), currency: CFG.currency };
+}
+const publicCfg = () => ({ priceList: CFG.priceList, price: CFG.price, priceYear: CFG.priceYear, currency: CFG.currency, trialDays: TRIAL_DAYS, playUrl: CFG.playUrl, appStoreUrl: CFG.appStoreUrl, whatsapp: CFG.whatsapp, email: CFG.email, editor: CFG.editor, support: SUPPORT, ai: !!AI_KEY,
+  promo: (CFG.promos || []).some(p => promoValid(p.code)), hardware: (CFG.hardware || []).filter(h => h.active).map(({ id, name, price, desc, img }) => ({ id, name, price, desc, img })) });
 
 /* ---------- utilitaires HTTP ---------- */
 const same = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };
@@ -115,9 +138,9 @@ http.createServer(async (req, res) => {
   try {
     const u = new URL(req.url, 'http://local'), p = u.pathname, ip = ipOf(req);
     const og = req.headers.origin; CORS = null;
-    if (og && APP_ORIGINS.has(og) && /^\/api\/(ping|register|sync|public|assistant)$/.test(p)) CORS = { 'Access-Control-Allow-Origin': og, 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '86400', 'Vary': 'Origin' };
+    if (og && APP_ORIGINS.has(og) && /^\/api\/(ping|register|sync|public|assistant|promo|count)$/.test(p)) CORS = { 'Access-Control-Allow-Origin': og, 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '86400', 'Vary': 'Origin' };
     if (req.method === 'OPTIONS') { res.writeHead(CORS ? 204 : 403, CORS || {}); return res.end(); }
-    if (req.method === 'GET' && p === '/api/public') return json(res, 200, { price: CFG.price, currency: CFG.currency, trialDays: TRIAL_DAYS, playUrl: CFG.playUrl, appStoreUrl: CFG.appStoreUrl, whatsapp: CFG.whatsapp, email: CFG.email, editor: CFG.editor, support: SUPPORT, ai: !!AI_KEY });
+    if (req.method === 'GET' && p === '/api/public') return json(res, 200, publicCfg());
     if (req.method === 'GET' && p === '/api/ping') return json(res, 200, { ok: true, app: 'boutik' });
 
     /* ===== API des téléphones ===== */
@@ -152,6 +175,43 @@ http.createServer(async (req, res) => {
       return json(res, 200, { seq: s.seq, pull, sub });
     }
 
+    if (req.method === 'POST' && p === '/api/promo') {
+      if (limited('promo:' + ip, 20, 36e5)) return json(res, 429, { error: 'Trop d\'essais, réessayez plus tard' });
+      const b = await readBody(req, 1e4), x = promoValid(b.code);
+      if (!x) return json(res, 404, { error: 'Code promo invalide ou expiré' });
+      const id = String(b.shop || ''), s = id && getShop(id);
+      if (s && same(s.key, b.key)) { s.plan.promo = x.code; dirty.add(id); return json(res, 200, { ok: true, code: x.code, off: x.off, per: x.per, sub: subState(s) }); }
+      return json(res, 200, { ok: true, code: x.code, off: x.off, per: x.per });
+    }
+    if (req.method === 'POST' && p === '/api/count') {
+      if (!AI_KEY) return json(res, 503, { error: 'Comptage par IA non activé' });
+      const b = await readBody(req, 9e6);
+      const id = String(b.shop || ''), s = getShop(id);
+      if (!s || !same(s.key, b.key)) return json(res, 403, { error: 'Accès refusé' });
+      if (subState(s).blocked) return json(res, 402, { error: 'Abonnement' });
+      if (limited('ai:' + id, AI_DAILY, 864e5)) return json(res, 429, { error: 'Limite du jour atteinte' });
+      const b64 = x => { x = String(x || '').replace(/^data:image\/jpeg;base64,/, ''); return x && !/[^A-Za-z0-9+/=]/.test(x) ? x : ''; };
+      const img = String(b.image || '').replace(/^data:image\/jpeg;base64,/, '');
+      if (!img || img.length > 5e6 || /[^A-Za-z0-9+/=]/.test(img)) return json(res, 400, { error: 'Photo invalide' });
+      // Produits : { code, name } ; photos de référence facultatives (petites, 12 au plus)
+      const prods = (Array.isArray(b.products) ? b.products : []).slice(0, 120).map(x => typeof x === 'string' ? { code: '', name: x.slice(0, 60) } : { code: String(x.code || '').slice(0, 12), name: String(x.name || '').slice(0, 60) });
+      const refs = (Array.isArray(b.refs) ? b.refs : []).slice(0, 12).map(r => ({ code: String(r.code || '').slice(0, 12), name: String(r.name || '').slice(0, 60), data: b64(r.image) })).filter(r => r.data && r.data.length < 4e5);
+      const refBlocks = refs.flatMap(r => [{ type: 'text', text: `Photo de référence du produit ${r.code} — ${r.name} :` }, { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: r.data } }]);
+      const list = prods.map(x => (x.code ? x.code + ' — ' : '') + x.name).join(' ; ');
+      try {
+        const r = await fetch(AI_URL, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': AI_KEY, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({ model: AI_MODEL, max_tokens: 900, system: 'Tu comptes des articles de magasin sur une photo. Réponds uniquement en JSON valide, sans texte autour : {"total": nombre, "items": [{"code": "code du produit de la liste ou vide", "name": "nom", "count": nombre}], "note": "remarque courte en français"}. Associe chaque article à un produit de la liste quand tu le reconnais (aide-toi des photos de référence), en recopiant son code. Attention aux variantes de taille ou de poids : en cas de doute, laisse le code vide et dis-le dans note. Si des articles sont cachés ou empilés, donne ton estimation et dis-le dans note.',
+            messages: [{ role: 'user', content: [...refBlocks, { type: 'text', text: 'Photo à compter :' }, { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: img } }, { type: 'text', text: 'Produits de la boutique : ' + (list || 'non précisés') + '. Combien d\'articles vois-tu, par produit ?' }] }] }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { console.error('IA comptage', r.status, JSON.stringify(j).slice(0, 300)); return json(res, 502, { error: 'Comptage indisponible' }); }
+        const t = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+        let out; try { out = JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)); } catch (e) { return json(res, 502, { error: 'Réponse illisible, réessayez' }); }
+        const codes = new Set(prods.map(x => x.code).filter(Boolean));
+        const items = (Array.isArray(out.items) ? out.items : []).slice(0, 80).map(x => ({ code: codes.has(String(x.code || '')) ? String(x.code) : '', name: String(x.name || '').slice(0, 60), count: Math.max(0, Math.round(+x.count || 0)) }));
+        s.aiCount = (s.aiCount || 0) + 1; dirty.add(id);
+        return json(res, 200, { total: Math.max(0, Math.round(+out.total || items.reduce((a, x) => a + x.count, 0))), items, note: String(out.note || '').slice(0, 300) });
+      } catch (e) { return json(res, 502, { error: 'Comptage indisponible' }); }
+    }
     if (req.method === 'POST' && p === '/api/assistant') {
       if (!AI_KEY) return json(res, 503, { error: 'Assistant en ligne non activé' });
       const b = await readBody(req, 3e5);
@@ -190,12 +250,17 @@ http.createServer(async (req, res) => {
         return json(res, 200, { shops: list, config: CFG, trialDays: TRIAL_DAYS, graceDays: GRACE_DAYS, support: SUPPORT });
       }
       if (req.method === 'POST' && p === '/api/admin/config') {
-        const b = await readBody(req, 1e4); CFG.price = Math.max(0, +b.price || 0); CFG.currency = String(b.currency || 'FCFA').slice(0, 8);
+        const b = await readBody(req, 2e5); CFG.price = Math.max(0, +b.price || 0); CFG.currency = String(b.currency || 'FCFA').slice(0, 8);
+        CFG.priceList = Math.max(CFG.price, +b.priceList || 0); CFG.priceYear = Math.max(0, +b.priceYear || CFG.price * 10);
+        if (Array.isArray(b.promos)) { const old = new Map((CFG.promos || []).map(x => [x.code, x])); const seen = new Set();
+          CFG.promos = b.promos.slice(0, 100).map(x => ({ code: String(x.code || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 24), off: Math.max(0, +x.off || 0), per: x.per === 'once' ? 'once' : 'mois', active: !!x.active, until: /^\d{4}-\d{2}-\d{2}$/.test(x.until || '') ? x.until : '', max: Math.max(0, +x.max || 0), uses: (old.get(String(x.code || '').trim().toUpperCase()) || {}).uses || 0, note: String(x.note || '').slice(0, 80) }))
+            .filter(x => x.code && !seen.has(x.code) && seen.add(x.code)); }
+        if (Array.isArray(b.hardware)) CFG.hardware = b.hardware.slice(0, 50).map((h, i) => ({ id: String(h.id || 'h' + i).replace(/[^\w-]/g, '').slice(0, 20) || 'h' + i, name: String(h.name || '').slice(0, 80), price: Math.max(0, +h.price || 0), desc: String(h.desc || '').slice(0, 300), img: /^https:\/\//.test(h.img || '') ? String(h.img).slice(0, 300) : '', active: h.active !== false })).filter(h => h.name);
         const url = x => { x = String(x || '').trim().slice(0, 300); return /^https:\/\//.test(x) ? x : ''; };
         CFG.playUrl = url(b.playUrl); CFG.appStoreUrl = url(b.appStoreUrl); CFG.whatsapp = String(b.whatsapp || '').replace(/[^\d+]/g, '').slice(0, 20); CFG.email = String(b.email || '').slice(0, 120); CFG.editor = String(b.editor || '').slice(0, 120); saveCfg();
         return json(res, 200, { config: CFG });
       }
-      const m = p.match(/^\/api\/admin\/shop\/([a-f0-9]{16})\/(extend|suspend|rekey|info|unpay)$/);
+      const m = p.match(/^\/api\/admin\/shop\/([a-f0-9]{16})\/(extend|suspend|rekey|info|unpay|plan)$/);
       if (req.method === 'POST' && m) {
         const s = getShop(m[1]); if (!s) return json(res, 404, { error: 'Boutique introuvable' });
         const b = await readBody(req, 1e5);
@@ -205,8 +270,10 @@ http.createServer(async (req, res) => {
           const base = Math.max(Date.now(), new Date(s.plan.until).getTime()), d = new Date(base);
           if (months) d.setMonth(d.getMonth() + months); if (days) d.setDate(d.getDate() + days);
           s.plan.until = d.toISOString(); s.plan.status = b.trial ? 'essai' : 'actif'; s.plan.suspended = false;
-          if (!b.trial) s.pays.unshift({ id: crypto.randomBytes(4).toString('hex'), date: nowIso(), amount: Math.max(0, +b.amount || 0), months, days, method: String(b.method || '').slice(0, 30), note: String(b.note || '').slice(0, 200) });
+          if (!b.trial) { const pr = promoValid(s.plan.promo); if (pr) { pr.uses = (pr.uses || 0) + 1; saveCfg(); if (pr.per === 'once') s.plan.promo = ''; }
+            s.pays.unshift({ id: crypto.randomBytes(4).toString('hex'), date: nowIso(), amount: Math.max(0, +b.amount || 0), months, days, cycle: s.plan.cycle || 'mois', promo: pr ? pr.code : '', method: String(b.method || '').slice(0, 30), note: String(b.note || '').slice(0, 200) }); }
         }
+        if (m[2] === 'plan') { s.plan.cycle = b.cycle === 'an' ? 'an' : 'mois'; const c = String(b.promo || '').trim().toUpperCase(); if (c && !promoValid(c)) return json(res, 400, { error: 'Code promo invalide ou expiré' }); s.plan.promo = c; }
         if (m[2] === 'unpay') { s.pays = s.pays.filter(x => x.id !== b.id); }
         if (m[2] === 'suspend') s.plan.suspended = !!b.on;
         if (m[2] === 'info') s.info = { client: String(b.client || '').slice(0, 80), phone: String(b.phone || '').slice(0, 40), city: String(b.city || '').slice(0, 60), note: String(b.note || '').slice(0, 1000) };

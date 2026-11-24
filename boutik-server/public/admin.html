@@ -174,7 +174,7 @@ const QR = (() => {
   }
   return { encode, svg };
 })();
-
+if (typeof module !== 'undefined') module.exports = QR;
 
 {
 const $ = id => document.getElementById(id);
@@ -242,18 +242,25 @@ function drawer(html) { closeD(); const o = document.createElement('div'); o.cla
 function closeD() { $('ov')?.remove(); }
 function shop(id) { return D.shops.find(s => s.id === id); }
 function open(id) {
-  const s = shop(id), st = s.stats, price = D.config.price, cur = D.config.currency;
-  const remind = `Bonjour ${st.owner || ''}, votre abonnement Boutik pour « ${st.shopName} » ${s.sub.daysLeft >= 0 ? 'expire le ' + fd(s.sub.until) : 'a expiré le ' + fd(s.sub.until)}. Pour continuer : ${nf(price)} ${cur} par mois. Merci !`;
+  const s = shop(id), st = s.stats, cur = D.config.currency, t = s.sub.tarif || { cycle: 'mois', months: 1, due: D.config.price, list: D.config.priceList, off: 0, promo: '' };
+  const per = t.cycle === 'an' ? 'par an' : 'par mois';
+  const remind = `Bonjour ${st.owner || ''}, votre abonnement Boutik pour « ${st.shopName} » ${s.sub.daysLeft >= 0 ? 'expire le ' + fd(s.sub.until) : 'a expiré le ' + fd(s.sub.until)}. Pour continuer : ${nf(t.due)} ${cur} ${per}${t.promo ? ' (code ' + t.promo + ' compris)' : ''}. Merci !`;
+  const promos = (D.config.promos || []).filter(x => x.active);
+  CUR = { t, id }; pickedM = t.months;
   const phone = (s.info.phone || st.ownerPhone || '').replace(/\D/g, '');
   drawer(`<div class="row"><h1 class="grow" style="margin:0">${esc(st.shopName)}</h1><button class="btn soft sm" onclick="BK.close()">Fermer</button></div>
     <div class="mut" style="margin:4px 0 14px">Créée le ${fd(s.created)} · dernière activité ${ago(s.lastSeen)} · n° ${s.id}</div>
     <div class="card"><div class="row"><div class="grow"><div class="mut">Abonnement</div><div style="font-size:20px;font-weight:800">${statusPill(s)} <span style="font-size:15px">jusqu'au ${fd(s.sub.until)}</span></div></div>
       <button class="btn sm ${s.plan.suspended ? 'ok' : 'soft'}" onclick="BK.suspend('${id}',${!s.plan.suspended})">${s.plan.suspended ? 'Réactiver' : 'Suspendre'}</button></div>
+      <h3 style="margin-top:16px">Formule</h3>
+      <div class="g2"><div><label class="f" style="margin-top:0">Facturation</label><select id="pcy"><option value="mois" ${t.cycle === 'mois' ? 'selected' : ''}>Mensuelle (${nf(D.config.price)} ${esc(cur)} / mois)</option><option value="an" ${t.cycle === 'an' ? 'selected' : ''}>Annuelle (${nf(D.config.priceYear)} ${esc(cur)} / an)</option></select></div>
+        <div><label class="f" style="margin-top:0">Code promo</label><select id="ppr"><option value="">Aucun</option>${promos.map(x => `<option ${x.code === t.promo ? 'selected' : ''}>${esc(x.code)}</option>`).join('')}</select></div></div>
+      <div class="row" style="margin-top:10px"><div class="grow mut">À payer : <b style="color:var(--ink)">${nf(t.due)} ${esc(cur)} ${per}</b>${t.off ? ` · remise ${nf(t.off)}` : ''}${t.list > t.due ? ` · prix catalogue <s>${nf(t.list)}</s>` : ''}</div><button class="btn soft sm" onclick="BK.plan('${id}')">Appliquer</button></div>
       <h3 style="margin-top:16px">Enregistrer un paiement</h3>
-      <div class="g4">${[1, 3, 6, 12].map(m => `<button class="btn soft sm mo" data-m="${m}" onclick="BK.pickM(${m})">${m} mois</button>`).join('')}</div>
-      <div class="g2"><div><label class="f">Montant reçu (${esc(cur)})</label><input id="pa" inputmode="numeric" value="${price}"></div><div><label class="f">Moyen</label><select id="pm"><option>Mobile Money</option><option>Espèces</option><option>Virement</option><option>Autre</option></select></div></div>
+      <div class="g4">${(t.cycle === 'an' ? [12, 24] : [1, 3, 6, 12]).map(m => `<button class="btn ${m === t.months ? 'acc' : 'soft'} sm mo" data-m="${m}" onclick="BK.pickM(${m})">${m === 12 && t.cycle === 'an' ? '1 an' : m === 24 ? '2 ans' : m + ' mois'}</button>`).join('')}</div>
+      <div class="g2"><div><label class="f">Montant reçu (${esc(cur)})</label><input id="pa" inputmode="numeric" value="${t.due}"></div><div><label class="f">Moyen</label><select id="pm"><option>Mobile Money</option><option>Espèces</option><option>Virement</option><option>Autre</option></select></div></div>
       <label class="f">Note</label><input id="pn" placeholder="Ex : réf. Wave, payé par le gérant">
-      <button class="btn ok" style="width:100%;margin-top:12px" onclick="BK.extend('${id}')">Valider : +<span id="pmo">1</span> mois</button>
+      <button class="btn ok" style="width:100%;margin-top:12px" onclick="BK.extend('${id}')">Valider : +<span id="pmo">${t.months}</span> mois</button>
       <div class="row" style="margin-top:10px"><input id="td" inputmode="numeric" placeholder="Jours offerts" style="max-width:140px"><button class="btn soft sm" onclick="BK.trial('${id}')">Offrir des jours d'essai</button></div>
       ${phone ? `<a class="btn soft sm" style="margin-top:10px" target="_blank" rel="noopener" href="https://wa.me/${phone}?text=${encodeURIComponent(remind)}">Relancer sur WhatsApp</a>` : ''}</div>
     <div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="kpi"><div class="k">Ventes 30 j</div><div class="v">${st.sales30}</div></div><div class="kpi"><div class="k">Chiffre 30 j</div><div class="v">${nf(st.ca30)}</div></div><div class="kpi"><div class="k">Téléphones</div><div class="v">${st.devices}</div></div>
@@ -262,15 +269,30 @@ function open(id) {
       <div class="g2"><div><label class="f" style="margin-top:0">Nom du client</label><input id="ic" value="${esc(s.info.client || st.owner)}"></div><div><label class="f" style="margin-top:0">Téléphone / WhatsApp</label><input id="ip" value="${esc(s.info.phone || st.ownerPhone)}"></div></div>
       <label class="f">Ville / quartier</label><input id="iv" value="${esc(s.info.city || '')}"><label class="f">Notes</label><textarea id="in" rows="3">${esc(s.info.note || '')}</textarea>
       <button class="btn" style="margin-top:10px" onclick="BK.info('${id}')">Enregistrer la fiche</button></div>
-    <h3>Paiements reçus</h3><div class="card" style="padding:6px 12px">${s.pays.length ? `<table>${s.pays.map(p => `<tr><td>${fd(p.date)}<div class="mut">${esc(p.method)}${p.note ? ' · ' + esc(p.note) : ''}</div></td><td>${p.months ? p.months + ' mois' : ''}${p.days ? p.days + ' j' : ''}</td><td class="n"><b>${nf(p.amount)}</b></td><td class="n"><button class="btn soft sm" onclick="BK.unpay('${id}','${p.id}')">✕</button></td></tr>`).join('')}</table>` : '<div class="mut" style="padding:14px">Aucun paiement</div>'}</div>
+    <h3>Paiements reçus</h3><div class="card" style="padding:6px 12px">${s.pays.length ? `<table>${s.pays.map(p => `<tr><td>${fd(p.date)}<div class="mut">${esc(p.method)}${p.note ? ' · ' + esc(p.note) : ''}</div></td><td>${p.months ? p.months + ' mois' : ''}${p.days ? p.days + ' j' : ''}<div class="mut">${p.cycle === 'an' ? 'annuel' : ''}${p.promo ? ' · ' + esc(p.promo) : ''}</div></td><td class="n"><b>${nf(p.amount)}</b></td><td class="n"><button class="btn soft sm" onclick="BK.unpay('${id}','${p.id}')">✕</button></td></tr>`).join('')}</table>` : '<div class="mut" style="padding:14px">Aucun paiement</div>'}</div>
     <h3>Téléphones connectés</h3><div class="card" style="padding:6px 12px">${Object.keys(s.devicesList).length ? `<table>${Object.entries(s.devicesList).map(([d, x]) => `<tr><td><b>${esc(d.slice(0, 8))}</b><div class="mut">${esc(x.ua)}</div></td><td class="n">${ago(x.seen)}</td></tr>`).join('')}</table>` : '<div class="mut" style="padding:14px">Aucun</div>'}</div>
     <h3>Sécurité</h3><div class="card"><div class="mut">Si le client a perdu un téléphone ou si son code de jumelage a circulé : créez un nouveau code. Tous les téléphones sont déconnectés et doivent rejoindre la boutique avec le nouveau code. Rien n'est perdu.</div>
       <button class="btn bad" style="margin-top:12px" onclick="BK.rekey('${id}')">Créer un nouveau code de jumelage</button><div id="newcode"></div></div>`);
 }
-let pickedM = 1;
+let pickedM = 1, CUR = null, ED = null;
+const PROMO_ROW = (x, i) => `<tr><td><input value="${esc(x.code)}" data-i="${i}" data-k="code" style="min-width:110px;text-transform:uppercase"></td><td><input inputmode="numeric" value="${x.off}" data-i="${i}" data-k="off" style="max-width:90px"></td>
+  <td><select data-i="${i}" data-k="per"><option value="mois" ${x.per !== 'once' ? 'selected' : ''}>par mois</option><option value="once" ${x.per === 'once' ? 'selected' : ''}>une fois</option></select></td><td><input type="date" value="${esc(x.until || '')}" data-i="${i}" data-k="until"></td>
+  <td><input inputmode="numeric" value="${x.max || ''}" placeholder="∞" data-i="${i}" data-k="max" style="max-width:60px"></td><td class="n">${x.uses || 0}</td><td><input type="checkbox" ${x.active ? 'checked' : ''} data-i="${i}" data-k="active"></td><td><button class="btn soft sm" onclick="BK.delPromo(${i})">✕</button></td></tr>`;
+const HW_ROW = (h, i) => `<div class="card" style="background:#f7f8fa;box-shadow:none"><div class="g2"><div><label class="f" style="margin-top:0">Nom</label><input value="${esc(h.name)}" data-h="${i}" data-k="name"></div><div><label class="f" style="margin-top:0">Prix (0 = sur demande)</label><input inputmode="numeric" value="${h.price || 0}" data-h="${i}" data-k="price"></div></div>
+  <label class="f">Description</label><input value="${esc(h.desc || '')}" data-h="${i}" data-k="desc"><label class="f">Photo (lien https, facultatif)</label><input value="${esc(h.img || '')}" data-h="${i}" data-k="img" placeholder="https://…">
+  <div class="row" style="margin-top:10px"><label class="row grow" style="gap:6px"><input type="checkbox" ${h.active !== false ? 'checked' : ''} data-h="${i}" data-k="active"> En vente</label><button class="btn soft sm" onclick="BK.delHw(${i})">Retirer</button></div></div>`;
+function readEd() {
+  document.querySelectorAll('[data-i]').forEach(e => { const x = ED.promos[+e.dataset.i]; if (x) x[e.dataset.k] = e.type === 'checkbox' ? e.checked : e.value; });
+  document.querySelectorAll('[data-h]').forEach(e => { const x = ED.hw[+e.dataset.h]; if (x) x[e.dataset.k] = e.type === 'checkbox' ? e.checked : e.value; });
+}
 const BK = window.BK = {
   f(k) { filter = k; main(); }, open, close: closeD,
-  pickM(m) { pickedM = m; document.querySelectorAll('.mo').forEach(b => { b.classList.toggle('acc', +b.dataset.m === m); b.classList.toggle('soft', +b.dataset.m !== m); }); $('pa').value = D.config.price * m; $('pmo').textContent = m; },
+  pickM(m) { pickedM = m; document.querySelectorAll('.mo').forEach(b => { b.classList.toggle('acc', +b.dataset.m === m); b.classList.toggle('soft', +b.dataset.m !== m); }); $('pa').value = Math.round(CUR.t.due * m / CUR.t.months); $('pmo').textContent = m; },
+  async plan(id) { const j = await BK.act(id, 'plan', { cycle: $('pcy').value, promo: $('ppr').value }, 'Formule mise à jour'); if (j) { main(); open(id); } },
+  addPromo() { readEd(); ED.promos.push({ code: '', off: 5000, per: 'mois', until: '', max: 0, uses: 0, active: true }); BK.settings(true); },
+  delPromo(i) { readEd(); ED.promos.splice(i, 1); BK.settings(true); },
+  addHw() { readEd(); ED.hw.push({ name: '', price: 0, desc: '', img: '', active: true }); BK.settings(true); },
+  delHw(i) { readEd(); ED.hw.splice(i, 1); BK.settings(true); },
   async act(id, what, body, msg) { try { const j = await api(`shop/${id}/${what}`, body); const i = D.shops.findIndex(s => s.id === id); D.shops[i] = j.shop; if (msg) toast(msg); return j; } catch (e) { if (e.message !== 'auth') toast(e.message); } },
   async extend(id) { const j = await BK.act(id, 'extend', { months: pickedM, amount: +$('pa').value || 0, method: $('pm').value, note: $('pn').value }, 'Paiement enregistré'); if (j) { main(); open(id); } },
   async trial(id) { const d = +$('td').value; if (!d) return toast('Nombre de jours ?'); const j = await BK.act(id, 'extend', { days: d, trial: true }, d + ' jours offerts'); if (j) { main(); open(id); } },
@@ -278,16 +300,28 @@ const BK = window.BK = {
   async info(id) { const j = await BK.act(id, 'info', { client: $('ic').value, phone: $('ip').value, city: $('iv').value, note: $('in').value }, 'Fiche enregistrée'); if (j) main(), open(id); },
   async unpay(id, pid) { if (!confirmIn('Supprimer ce paiement de l\'historique ? (la date d\'expiration ne change pas)')) return; const j = await BK.act(id, 'unpay', { id: pid }, 'Paiement supprimé'); if (j) { main(); open(id); } },
   async rekey(id) { if (!confirmIn('Créer un nouveau code ? Tous les téléphones de cette boutique devront se reconnecter.')) return; const j = await BK.act(id, 'rekey', {}); if (j && j.code) { main(); open(id); $('newcode').innerHTML = `<div class="qr" style="margin-top:12px">${QR.svg(j.code, 5)}</div><div class="code" style="margin-top:8px">${esc(j.code)}</div><div class="mut" style="margin-top:6px">Sur le téléphone du client : « Rejoindre ma boutique » puis scanner ce code.</div>`; } },
-  settings() { drawer(`<div class="row"><h1 class="grow" style="margin:0">Réglages</h1><button class="btn soft sm" onclick="BK.close()">Fermer</button></div>
-    <div class="card" style="margin-top:14px"><div class="g2"><div><label class="f" style="margin-top:0">Prix par mois</label><input id="cp" inputmode="numeric" value="${D.config.price}"></div><div><label class="f" style="margin-top:0">Monnaie</label><input id="cc" value="${esc(D.config.currency)}"></div></div>
+  settings(keep) { if (!keep || !ED) ED = { promos: JSON.parse(JSON.stringify(D.config.promos || [])), hw: JSON.parse(JSON.stringify(D.config.hardware || [])), v: { cl: D.config.priceList, cp: D.config.price, cy: D.config.priceYear, cc: D.config.currency } }; else ['cl', 'cp', 'cy', 'cc'].forEach(k => { if ($(k)) ED.v[k] = $(k).value; });
+    const sc = $('ov') && $('ov').querySelector('.drawer').scrollTop;
+    drawer(`<div class="row"><h1 class="grow" style="margin:0">Réglages</h1><button class="btn soft sm" onclick="BK.close()">Fermer</button></div>
+    <h3>Tarifs (s'appliquent au site, à l'appli et aux relances)</h3>
+    <div class="card"><div class="g2"><div><label class="f" style="margin-top:0">Prix catalogue / mois (barré)</label><input id="cl" inputmode="numeric" value="${ED.v.cl}"></div><div><label class="f" style="margin-top:0">Prix actuel / mois</label><input id="cp" inputmode="numeric" value="${ED.v.cp}"></div></div>
+      <div class="g2"><div><label class="f">Prix annuel</label><input id="cy" inputmode="numeric" value="${ED.v.cy}"></div><div><label class="f">Monnaie</label><input id="cc" value="${esc(ED.v.cc)}"></div></div>
+      <div class="mut" style="margin-top:8px">Mensuel ou annuel se choisit boutique par boutique (fiche de la boutique → Formule).</div></div>
+    <h3>Codes promo</h3>
+    <div class="card" style="overflow-x:auto"><table><tr><th>Code</th><th>Remise</th><th>Appliquée</th><th>Fin</th><th>Max</th><th class="n">Utilisés</th><th>Actif</th><th></th></tr>${ED.promos.map(PROMO_ROW).join('')}</table>
+      <button class="btn soft sm" style="margin-top:10px" onclick="BK.addPromo()">+ Nouveau code</button>
+      <div class="mut" style="margin-top:8px">« par mois » : la remise s'applique chaque mois (×12 sur l'annuel). « une fois » : sur un seul paiement. Le commerçant saisit le code dans l'appli, ou vous l'appliquez dans sa fiche.</div></div>
+    <h3>Matériel en vente (affiché dans l'appli et sur le site)</h3>
+    ${ED.hw.map(HW_ROW).join('')}<button class="btn soft sm" onclick="BK.addHw()">+ Ajouter un article</button>
+    <div class="card" style="margin-top:14px">
     <h3>Site public et stores</h3>
     <label class="f">Lien Google Play (vide = « bientôt »)</label><input id="cpl" value="${esc(D.config.playUrl || '')}" placeholder="https://play.google.com/store/apps/details?id=…">
     <label class="f">Lien App Store (vide = « bientôt »)</label><input id="cas" value="${esc(D.config.appStoreUrl || '')}" placeholder="https://apps.apple.com/…">
     <div class="g2"><div><label class="f">WhatsApp commercial</label><input id="cwa" value="${esc(D.config.whatsapp || '')}" placeholder="2250700000000"></div><div><label class="f">E-mail de contact</label><input id="cem" value="${esc(D.config.email || '')}"></div></div>
     <label class="f">Éditeur (nom de la société, affiché sur le site et la politique de confidentialité)</label><input id="ced" value="${esc(D.config.editor || '')}">
     <button class="btn" style="margin-top:12px" onclick="BK.saveCfg()">Enregistrer</button></div>
-    <div class="card mut">Réglés sur Render (variables d'environnement) : essai gratuit <b>TRIAL_DAYS</b> = ${D.trialDays} j · délai de grâce <b>GRACE_DAYS</b> = ${D.graceDays} j · contact affiché aux clients <b>SUPPORT_CONTACT</b> = ${esc(D.support || '—')} · mot de passe <b>ADMIN_PASSWORD</b>.</div>`); },
-  async saveCfg() { try { const j = await api('config', { price: +$('cp').value || 0, currency: $('cc').value, playUrl: $('cpl').value, appStoreUrl: $('cas').value, whatsapp: $('cwa').value, email: $('cem').value, editor: $('ced').value }); D.config = j.config; toast('Réglages enregistrés'); closeD(); main(); } catch (e) { if (e.message !== 'auth') toast(e.message); } },
+    <div class="card mut">Réglés sur Render (variables d'environnement) : essai gratuit <b>TRIAL_DAYS</b> = ${D.trialDays} j · délai de grâce <b>GRACE_DAYS</b> = ${D.graceDays} j · contact affiché aux clients <b>SUPPORT_CONTACT</b> = ${esc(D.support || '—')} · mot de passe <b>ADMIN_PASSWORD</b>.</div>`); if (keep && sc) $('ov').querySelector('.drawer').scrollTop = sc; },
+  async saveCfg() { readEd(); try { const j = await api('config', { priceList: +$('cl').value || 0, price: +$('cp').value || 0, priceYear: +$('cy').value || 0, promos: ED.promos, hardware: ED.hw, currency: $('cc').value, playUrl: $('cpl').value, appStoreUrl: $('cas').value, whatsapp: $('cwa').value, email: $('cem').value, editor: $('ced').value }); D.config = j.config; toast('Réglages enregistrés'); closeD(); main(); } catch (e) { if (e.message !== 'auth') toast(e.message); } },
   async logout() { try { await api('logout', {}); } catch (e) {} TOKEN = null; try { sessionStorage.removeItem('bk_admin'); } catch (e) {} loginView(); },
   csv() { const rows = [['Boutique', 'Client', 'Téléphone', 'Ville', 'Statut', 'Expire le', 'Dernière activité', 'Ventes 30j', 'CA 30j', 'Payé total', 'Créée le', 'N°']]; D.shops.forEach(s => rows.push([s.stats.shopName, s.info.client || s.stats.owner, s.info.phone || s.stats.ownerPhone, s.info.city || '', s.sub.status, fd(s.sub.until), s.lastSeen ? new Date(s.lastSeen).toLocaleString('fr-FR') : '', s.stats.sales30, s.stats.ca30, s.pays.reduce((a, p) => a + p.amount, 0), fd(s.created), s.id]));
     const t = '﻿' + rows.map(r => r.map(x => `"${String(x ?? '').replace(/"/g, '""')}"`).join(';')).join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([t], { type: 'text/csv' })); a.download = 'boutik-clients.csv'; a.click(); }

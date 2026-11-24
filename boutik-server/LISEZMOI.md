@@ -94,3 +94,29 @@ Un vendeur n'obtient jamais les marges, les prix d'achat ni l'argent attendu.
 4. Chaque boutique active ensuite « Assistant IA en ligne » dans Fonctions.
 
 Les questions en ligne sont facturées par Anthropic sur votre compte : gardez une limite par jour.
+
+## Tarifs, codes promo et facturation
+
+Tout se règle dans la console `/admin` → **Réglages**, et s'applique partout : site, appli, relances WhatsApp.
+- **Prix catalogue** : il s'affiche barré (défaut 25 000).
+- **Prix actuel** : 20 000 par mois.
+- **Prix annuel** : défaut 200 000.
+- **Codes promo** :
+  - remise en FCFA, « par mois » ou « une fois » ;
+  - date de fin et nombre maximum d'utilisations ;
+  - le compteur d'utilisations monte à chaque paiement enregistré.
+  - Le commerçant saisit le code dans l'appli (Paramètres → Mon abonnement Boutik), ou vous l'appliquez dans sa fiche.
+- **Mensuel ou annuel** : à choisir boutique par boutique, dans sa fiche → **Formule**. Le montant à encaisser est calculé tout seul.
+
+## Matériel en vente
+
+Ajoutez dans Réglages les imprimantes et les rouleaux d'étiquettes que vous vendez : nom, prix, description, photo. Ils s'affichent :
+- dans l'appli (Plus → Imprimantes et étiquettes) ;
+- sur le site, avec un bouton pour commander sur votre WhatsApp commercial.
+
+## Comptage par photo (IA)
+
+Même clé `ANTHROPIC_API_KEY` que l'assistant. Le commerçant active « Comptage par photo (IA) » dans Fonctions. Dans le scanner, le bouton **Compter (IA)** estime le nombre d'articles sans étiquette :
+- l'IA reçoit aussi les photos des produits enregistrées dans Stock (12 au plus, en petit format) pour ne pas confondre les variantes ;
+- le résultat est corrigeable, puis passe par le **recensement** normal : le patron voit les écarts et coche ce qu'il corrige, et un vendeur l'envoie au patron ;
+- chaque comptage par photo est noté dans le journal. Le scanner compte aussi, sans IA, les étiquettes QR visibles.

@@ -183,7 +183,7 @@ footer a{color:#fff;text-decoration:none}
     <div class="step" style="background:var(--bg)">
       <h3>Les écrans vendeur parlent sa langue</h3>
       <p>Chaque vendeur choisit sa langue. Le propriétaire peut corriger chaque phrase.</p>
-      <div class="langs"><span>Français</span><span>English</span><span>Dioula</span><span>Bambara</span><span>Wolof</span><span>Hausa</span><span>Kiswahili</span><span>Lingala</span></div>
+      <div class="langs"><span>Français</span><span>English</span><span>Dioula</span><span>Bambara</span><span>Wolof</span><span>Hausa</span><span>Kiswahili</span><span>Lingala</span><span>العربية</span><span>Baoulé*</span><span>Bété*</span></div><div style="font-size:12.5px;color:var(--mut);margin-top:10px">* en cours : quelques mots traduits, le reste en français, à compléter par vos vendeurs.</div>
     </div>
     <div class="step" style="background:var(--bg);margin-top:14px">
       <h3>Vos fonctions, à la carte</h3>
@@ -198,8 +198,10 @@ footer a{color:#fff;text-decoration:none}
   <div class="price">
     <div class="pcard">
       <b>Boutik — une boutique</b>
-      <div class="amount"><span id="price">5 000</span> <small><span id="cur">FCFA</span> / mois</small></div>
-      <div style="color:var(--mut)">Vendeurs illimités · produits illimités</div>
+      <div id="plist" style="color:var(--mut);font-weight:600;margin-top:6px"><s><span id="list">25 000</span> FCFA</s> · offre de lancement</div>
+      <div class="amount"><span id="price">20 000</span> <small><span id="cur">FCFA</span> / mois</small></div>
+      <div style="color:var(--mut)">ou <b id="year" style="color:var(--ink)">200 000 FCFA</b> par an <span id="ysave"></span></div>
+      <div style="color:var(--mut);margin-top:4px">Vendeurs illimités · produits illimités<span id="promoTxt"> · code promo accepté</span></div>
       <ul class="checks" id="incl"></ul>
       <a class="btn acc" style="width:100%" href="/app/">Commencer l'essai gratuit</a>
     </div>
@@ -209,6 +211,12 @@ footer a{color:#fff;text-decoration:none}
       <a class="btn light" id="ctaWa2" href="#questions" target="_blank" rel="noopener">Écrire sur WhatsApp</a>
     </div>
   </div>
+</div></section>
+
+<section class="band white" id="materiel" style="display:none"><div class="w">
+  <h2>Le matériel pour vos étiquettes</h2>
+  <p class="sub">Imprimante Bluetooth sans encre, rouleaux d'étiquettes autocollantes : tout fonctionne avec Boutik. Commandez sur WhatsApp.</p>
+  <div class="feats" id="hw" style="margin-top:26px"></div>
 </div></section>
 
 <section class="band" id="questions"><div class="w" style="max-width:860px">
@@ -349,7 +357,7 @@ const QR = (() => {
 
 
 {
-const I = { shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/>', lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>', eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>', scan: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M4 12h16"/>', phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>', box: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>', cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>', card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>', send: '<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>', wifi: '<path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01"/><path d="M3 3l18 18"/>', hand: '<path d="M7 11V5a1.5 1.5 0 0 1 3 0v5M10 10V3.5a1.5 1.5 0 0 1 3 0V10M13 10V5a1.5 1.5 0 0 1 3 0v6M16 11V8a1.5 1.5 0 0 1 3 0v6a7 7 0 0 1-7 7h-1a6 6 0 0 1-5-2.7L3 14a1.5 1.5 0 0 1 2.5-1.7L7 14"/>', check: '<path d="m5 12 5 5 9-10"/>', spark: '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>' };
+const I = { monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',  shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/>', lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>', eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>', scan: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M4 12h16"/>', phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>', box: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>', cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>', card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>', send: '<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>', wifi: '<path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01"/><path d="M3 3l18 18"/>', hand: '<path d="M7 11V5a1.5 1.5 0 0 1 3 0v5M10 10V3.5a1.5 1.5 0 0 1 3 0V10M13 10V5a1.5 1.5 0 0 1 3 0v6M16 11V8a1.5 1.5 0 0 1 3 0v6a7 7 0 0 1-7 7h-1a6 6 0 0 1-5-2.7L3 14a1.5 1.5 0 0 1 2.5-1.7L7 14"/>', check: '<path d="m5 12 5 5 9-10"/>', spark: '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>' };
 const ic = n => `<svg class="i" viewBox="0 0 24 24">${I[n]}</svg>`;
 const feats = [
   ['lock', 'Caisse comptée à l\'aveugle', 'Le vendeur compte ses billets sans voir le montant attendu. Il ne peut pas « arranger » son comptage.'],
@@ -365,11 +373,13 @@ const local = [
   ['card', 'Crédit des clients et des fournisseurs', 'Qui doit combien, relance WhatsApp en un geste, dettes envers vos grossistes.'],
   ['hand', 'Marchandage encadré et prix de gros', 'Le vendeur négocie jusqu\'au prix minimum que vous fixez, pas en dessous.'],
   ['wifi', 'Coupures de réseau ? Aucun problème', 'Boutik vend sans internet et envoie tout dès que le réseau revient.'],
+  ['phone', 'Paiement Wave par QR code', 'Le vendeur montre votre QR Wave avec le montant. Le client paie, vous vérifiez chaque paiement.'],
+  ['monitor', 'Sur téléphone et sur ordinateur', 'Grand écran avec menu sur ordinateur, version mobile en un clic.'],
   ['send', 'Bilan du soir sur WhatsApp', 'Ventes, bénéfice, caisses justes ou en manque, produits à racheter.'],
   ['spark', 'Un assistant qui répond', 'Demandez « qu\'est-ce que je dois racheter ? » ou « y a-t-il des vols ? » : il répond avec vos chiffres, même sans internet.']
 ];
 document.getElementById('local').innerHTML = local.map(([i, t, d]) => `<li><div class="ico">${ic(i)}</div><div><b>${t}</b><span>${d}</span></div></li>`).join('');
-const incl = ['Caisse, stock et étiquettes QR', 'Contrôle des vendeurs et des caisses', 'Suivi à distance sur votre téléphone', 'Mobile Money, crédit, dépenses, fournisseurs', '8 langues, fonctionne hors connexion', 'Assistant qui répond à vos questions', 'Sauvegarde en ligne et export Excel'];
+const incl = ['Caisse, stock et étiquettes QR', 'Contrôle des vendeurs et des caisses', 'Suivi à distance sur votre téléphone', 'Mobile Money et QR Wave, crédit, dépenses', '11 langues, fonctionne hors connexion', 'Assistant qui répond à vos questions', 'Sauvegarde en ligne et export Excel'];
 document.getElementById('incl').innerHTML = incl.map(t => `<li>${ic('check')}<span>${t}</span></li>`).join('');
 const faq = [
   ['Faut-il internet pour vendre ?', 'Non. Boutik fonctionne entièrement sans connexion. Internet sert seulement à envoyer les ventes vers votre téléphone et à sauvegarder ; tout part automatiquement quand le réseau revient.'],
@@ -385,7 +395,14 @@ document.getElementById('yr').textContent = new Date().getFullYear();
 const nf = n => Math.round(n || 0).toLocaleString('fr-FR').replace(/[  ]/g, ' ');
 fetch('/api/public').then(r => r.ok ? r.json() : null).then(c => {
   if (!c) return;
-  document.getElementById('price').textContent = nf(c.price); document.getElementById('cur').textContent = c.currency || 'FCFA'; document.getElementById('trial').textContent = c.trialDays || 30;
+  const cu = c.currency || 'FCFA';
+  document.getElementById('price').textContent = nf(c.price); document.getElementById('cur').textContent = cu;
+  if (c.priceList > c.price) document.getElementById('list').textContent = nf(c.priceList); else document.getElementById('plist').style.display = 'none';
+  if (c.priceYear) { document.getElementById('year').textContent = nf(c.priceYear) + ' ' + cu; const sv = c.price * 12 - c.priceYear; if (sv > 0) document.getElementById('ysave').textContent = '(' + nf(sv) + ' ' + cu + ' économisés)'; } else document.getElementById('year').parentNode.style.display = 'none';
+  if (!c.promo) document.getElementById('promoTxt').style.display = 'none';
+  const hw = c.hardware || [], wa0 = String(c.whatsapp || '').replace(/\D/g, '');
+  if (hw.length) { document.getElementById('materiel').style.display = ''; const E = x => String(x || '').replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[m]);
+    document.getElementById('hw').innerHTML = hw.map(h => `<div class="feat">${/^https:\/\//.test(h.img || '') ? `<img src="${E(h.img)}" alt="" style="width:100%;height:160px;object-fit:cover;border-radius:16px;margin-bottom:12px">` : ''}<h3>${E(h.name)}</h3><p>${E(h.desc)}</p><p style="font-weight:800;color:var(--ink)">${h.price ? nf(h.price) + ' ' + E(cu) : 'Prix sur demande'}</p>${wa0 ? `<a class="btn acc" target="_blank" rel="noopener" href="https://wa.me/${wa0}?text=${encodeURIComponent('Bonjour, je voudrais commander : ' + h.name)}">Commander</a>` : ''}</div>`).join(''); } document.getElementById('trial').textContent = c.trialDays || 30;
   document.getElementById('ctaTry').textContent = `Essayer gratuitement ${c.trialDays || 30} jours`;
   const wa = String(c.whatsapp || '').replace(/\D/g, '');
   ['ctaWa', 'ctaWa2', 'ctaWa3'].forEach(id => { const a = document.getElementById(id); if (wa) a.href = `https://wa.me/${wa}?text=${encodeURIComponent('Bonjour, je voudrais en savoir plus sur Boutik pour ma boutique.')}`; else a.removeAttribute('target'); });
