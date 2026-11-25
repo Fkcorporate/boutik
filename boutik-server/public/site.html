@@ -123,7 +123,7 @@ footer a{color:#fff;text-decoration:none}
 <nav><div class="w">
   <a class="brand" href="#top"><span class="logo"><svg class="i" viewBox="0 0 24 24" style="width:20px;height:20px;color:#fff"><path d="M3 9l2-5h14l2 5M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0zM5 13v8h14v-8"/></svg></span>Boutik</a>
   <div class="links"><a href="#comment">Comment ça marche</a><a href="#fonctions">Fonctions</a><a href="#tarif">Tarif</a><a href="#materiel" id="navHw" style="display:none">Matériel</a><a href="#questions">Questions</a></div>
-  <a class="btn acc sm" href="/app/">Essayer</a>
+  <a class="btn sm ghost" href="/app/#connexion">Se connecter</a><a class="btn acc sm" href="/app/">Essayer</a>
 </div></nav>
 
 <header class="hero" id="top"><div class="w">
@@ -367,7 +367,7 @@ const QR = (() => {
 
 
 {
-const I = { tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>', monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',  shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/>', lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>', eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>', scan: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M4 12h16"/>', phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>', box: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>', cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>', card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>', send: '<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>', wifi: '<path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01"/><path d="M3 3l18 18"/>', hand: '<path d="M7 11V5a1.5 1.5 0 0 1 3 0v5M10 10V3.5a1.5 1.5 0 0 1 3 0V10M13 10V5a1.5 1.5 0 0 1 3 0v6M16 11V8a1.5 1.5 0 0 1 3 0v6a7 7 0 0 1-7 7h-1a6 6 0 0 1-5-2.7L3 14a1.5 1.5 0 0 1 2.5-1.7L7 14"/>', check: '<path d="m5 12 5 5 9-10"/>', spark: '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>' };
+const I = { bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>', receipt: '<path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/><path d="M9 8h6M9 12h6"/>', tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>', monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',  shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/>', lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>', eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>', scan: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M4 12h16"/>', phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>', box: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>', cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>', card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>', send: '<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>', wifi: '<path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01"/><path d="M3 3l18 18"/>', hand: '<path d="M7 11V5a1.5 1.5 0 0 1 3 0v5M10 10V3.5a1.5 1.5 0 0 1 3 0V10M13 10V5a1.5 1.5 0 0 1 3 0v6M16 11V8a1.5 1.5 0 0 1 3 0v6a7 7 0 0 1-7 7h-1a6 6 0 0 1-5-2.7L3 14a1.5 1.5 0 0 1 2.5-1.7L7 14"/>', check: '<path d="m5 12 5 5 9-10"/>', spark: '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>' };
 const ic = n => `<svg class="i" viewBox="0 0 24 24">${I[n]}</svg>`;
 const feats = [
   ['lock', 'Caisse comptée à l\'aveugle', 'Le vendeur compte ses billets sans voir le montant attendu. Il ne peut pas « arranger » son comptage.'],
@@ -386,6 +386,9 @@ const local = [
   ['tag', 'Vêtements et chaussures', 'Un modèle en plusieurs tailles et couleurs, chacune avec son stock et ses étiquettes. Retours et échanges en un geste.'],
   ['phone', 'Paiement Wave par QR code', 'Le vendeur montre votre QR Wave avec le montant. Le client paie, vous vérifiez chaque paiement.'],
   ['monitor', 'Sur téléphone et sur ordinateur', 'Grand écran avec menu sur ordinateur, version mobile en un clic.'],
+  ['bell', 'Alertes sur votre téléphone', 'Manque dans une caisse, vente à perte, rupture, surstock, caisse pas fermée : vous êtes prévenu tout de suite, même appli fermée.'],
+  ['box', 'Numéros de lot', 'Chaque arrivage avec son lot et sa date : la vente sort d\'abord ce qui périme le plus tôt.'],
+  ['receipt', 'Dossier pour le comptable', 'Chaque mois : un Excel complet (ventes, dépenses, stock, crédits, caisses) et un rapport PDF, envoyés au comptable en un geste.'],
   ['send', 'Bilan du soir sur WhatsApp', 'Ventes, bénéfice, caisses justes ou en manque, produits à racheter.'],
   ['spark', 'Un assistant qui répond', 'Demandez « qu\'est-ce que je dois racheter ? » ou « y a-t-il des vols ? » : il répond avec vos chiffres, même sans internet.']
 ];
@@ -404,6 +407,7 @@ const faq = [
   ['Puis-je payer à l\'année ?', 'Oui, l\'abonnement annuel revient moins cher que 12 mois. Si vous avez un code promo, saisissez-le dans l\'appli (Paramètres → Mon abonnement) ou donnez-le à notre équipe.'],
   ['Pour quels commerces ?', 'Alimentation, supérette, boissons, cosmétiques, téléphonie, quincaillerie, librairie, bazar, vêtements et chaussures (tailles et couleurs), services. Les dates de péremption peuvent être suivies. Boutik ne convient pas aux pharmacies ni aux restaurants.'],
   ['Combien de vendeurs et de produits ?', 'Autant que vous voulez : vendeurs, produits et ventes sont illimités. Chaque vendeur a son code et peut avoir sa propre langue.'],
+  ['Comment me connecter sur un autre téléphone ou un ordinateur ?', 'Touchez « Se connecter » en haut de cette page (ou « Rejoindre ma boutique » dans l\'appli), puis tapez le code à 6 chiffres affiché sur le téléphone du patron : Paramètres → Connecter un autre téléphone. Il n\'y a pas de mot de passe à retenir : chaque téléphone garde votre code secret à 4 chiffres. Téléphone perdu ? Contactez-nous, nous vous redonnons l\'accès après vérification.'],
   ['Et si j\'arrête de payer ?', 'Vos ventes restent sur votre téléphone, rien n\'est effacé. Seule la synchronisation avec les autres téléphones s\'arrête.']
 ];
 document.getElementById('faq').innerHTML = faq.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join('');

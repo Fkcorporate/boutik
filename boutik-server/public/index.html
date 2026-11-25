@@ -322,6 +322,7 @@ const IC = {
   inbox: '<path d="M12 3v11M7 9l5 5 5-5"/><path d="M3 15v5h18v-5"/>', hand: '<path d="M7 11V5a1.5 1.5 0 0 1 3 0v5M10 10V3.5a1.5 1.5 0 0 1 3 0V10M13 10V5a1.5 1.5 0 0 1 3 0v6M16 11V8a1.5 1.5 0 0 1 3 0v6a7 7 0 0 1-7 7h-1a6 6 0 0 1-5-2.7L3 14a1.5 1.5 0 0 1 2.5-1.7L7 14"/>',
   finger: '<path d="M12 11v3a6 6 0 0 1-1 3.3M8 11a4 4 0 0 1 8 0v2a10 10 0 0 1-.6 3.5M5 13v-2a7 7 0 0 1 12.2-4.7M19.6 9.5c.3.8.4 1.6.4 2.5v1a14 14 0 0 1-.5 3.7M8.6 19.5A8 8 0 0 0 10 15v-3"/>',
   keyb: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
   monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
   mobile: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18h2"/>',
   spark: '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
@@ -370,6 +371,7 @@ const FEATS = [
   ['variantes', 'Vente', 'Tailles et couleurs', 'Vêtements, chaussures : un modèle en plusieurs tailles et couleurs, chacune avec son stock et ses étiquettes', 0],
   ['retours', 'Vente', 'Retours et échanges', 'Le client rapporte un article : remboursement ou échange, avec votre code', 1],
   ['peremption', 'Vente', 'Dates de péremption', 'Alerte avant la date, pour vendre d\'abord ce qui expire', 0],
+  ['lots', 'Vente', 'Numéros de lot', 'Chaque arrivage a son n° de lot et sa date ; la vente sort d\'abord le lot qui périme le plus tôt', 0],
   ['photos', 'Vente', 'Photos des produits', 'Reconnaître les produits à l\'image', 1],
   ['shifts', 'Contrôle', 'Ouverture et fermeture de caisse', 'Chaque vendeur compte son argent en fin de poste', 1],
   ['blind', 'Contrôle', 'Comptage à l\'aveugle', 'Le vendeur ne voit pas combien il devrait avoir', 1],
@@ -410,7 +412,25 @@ const PAYI = { cash: 'cash', momo: 'phone', credit: 'card' };
 const HUES = ['#ff5b1f', '#1f2937', '#2f6fed', '#0f8a4f', '#7c4dff', '#c2410c', '#d6336c', '#0e7490', '#a16207', '#4338ca'];
 const hue = s => HUES[[...String(s)].reduce((a, c) => a + c.charCodeAt(0), 0) % HUES.length];
 function log(action, detail, user) { db.log.unshift({ id: uid(), date: now(), user: user || (me ? me.id : 'system'), action, detail: detail || '' }); if (db.log.length > 5000) db.log.length = 5000; }
-function move(pid, qty, type, note) { db.moves.unshift({ id: uid(), date: now(), pid, qty, type, user: me.id, note: note || '' }); }
+function move(pid, qty, type, note, lot) { const m = { id: uid(), date: now(), pid, qty, type, user: me.id, note: note || '' }; if (lot) m.lot = lot; db.moves.unshift(m); }
+/* Lots : la quantité de chaque lot se déduit des mouvements, comme le stock */
+const lotQty = (pid, lid) => Math.round(db.moves.reduce((a, m) => a + (m.pid === pid && m.lot === lid ? m.qty : 0), 0) * 1000) / 1000;
+function lotsOf(p, all) { return (p.lots || []).map((l, i) => ({ ...l, n: i + 1, q: lotQty(p.id, l.id) })).filter(l => all || l.q > 0).sort((a, b) => (a.exp || '9999').localeCompare(b.exp || '9999')); }
+function syncExp(p) { if (!p.lots || !p.lots.length) return; const e = lotsOf(p).map(l => l.exp).filter(Boolean).sort()[0]; p.exp = e || ''; }
+// Sortie de stock répartie sur les lots (celui qui périme le plus tôt d'abord, ou le lot scanné)
+function moveOut(p, q, type, note, pref) {
+  if (!(F('lots') && p.lots && p.lots.length) || q <= 0) { move(p.id, -q, type, note); return null; }
+  const ls = lotsOf(p); if (pref) ls.sort((a, b) => (b.id === pref) - (a.id === pref));
+  const alloc = []; let left = q;
+  ls.forEach(l => { if (left <= 0) return; const t = Math.min(left, l.q); if (t > 0) { alloc.push({ lot: l.id, q: t }); left = Math.round((left - t) * 1000) / 1000; } });
+  alloc.forEach(a => move(p.id, -a.q, type, note, a.lot)); if (left > 0) move(p.id, -left, type, note);
+  syncExp(p); return alloc.length ? alloc : null;
+}
+// Retour en stock : on remet dans les lots d'où l'article était sorti
+function moveBack(p, q, type, note, alloc) {
+  let left = q; (alloc || []).forEach(a => { if (left <= 0) return; const t = Math.min(left, a.q); move(p.id, t, type, note, a.lot); left = Math.round((left - t) * 1000) / 1000; });
+  if (left > 0) move(p.id, left, type, note); syncExp(p);
+}
 const openShift = uidv => db.shifts.find(s => s.user === uidv && s.status === 'ouvert');
 const v = id => (document.getElementById(id)?.value || '').trim();
 
@@ -470,7 +490,7 @@ function ownerAuth(why) {
 }
 
 /* ================= Création & connexion ================= */
-function start() { db.settings ? renderLogin() : renderSetup(); }
+function start() { if (location.hash === '#connexion' && !db.settings) setTimeout(joinSheet, 300); if (db.settings) { const tz = -new Date().getTimezoneOffset(); if (db.settings.tz !== tz) { db.settings.tz = tz; saveLocal(); } } db.settings ? renderLogin() : renderSetup(); }
 function renderSetup() {
   document.getElementById('app').innerHTML = `<div class="login">
     <div class="av xl" style="background:var(--acc)">${ic('store', 'l')}</div>
@@ -563,7 +583,7 @@ function render() {
   document.getElementById('app').innerHTML = `
   <div class="top"><div class="av ${isOwner() ? '' : 'e'}" style="${isOwner() ? 'background:var(--acc)' : ''}">${esc(initial(me.id))}</div>
     <div class="t" ${isOwner() && SHOPS.list.length > 1 ? `onclick="go('boutiques')" style="cursor:pointer"` : ''}><b>${esc(db.settings.shopName)}${isOwner() && SHOPS.list.length > 1 ? ' ▾' : ''}${SYNC.cfg ? `<span class="sync ${SYNC.state}" id="syncdot" title="Synchronisation"></span>` : ''}</b><span>${esc(userName(me.id))} · ${isOwner() ? 'Propriétaire' : (sh ? 'En poste depuis ' + fmtTime(sh.start) : 'Caisse fermée')}</span></div>
-    ${isWide() ? `<button class="ib" onclick="toggleLayout()" title="${LAYOUT === 'mobile' ? 'Version ordinateur' : 'Version mobile'}">${ic(LAYOUT === 'mobile' ? 'monitor' : 'mobile', 's')}</button>` : ''}${F('assistant') ? `<button class="ib" onclick="openAssistant()" title="Assistant" style="background:var(--ink);color:#fff">${ic('spark', 's')}</button>` : ''}<button class="ib" onclick="logout()" title="Changer d'utilisateur">${ic('logout', 's')}</button></div>
+    ${isOwner() ? (n => `<button class="ib" onclick="go('alertes')" title="Alertes" style="position:relative">${ic('bell', 's')}${n ? `<span class="dot" style="position:absolute;top:-4px;right:-4px;background:var(--bad);color:#fff;font-size:11px;min-width:20px;height:20px;border-radius:10px;display:flex;align-items:center;justify-content:center;padding:0 5px;font-weight:800">${n > 99 ? '99+' : n}</span>` : ''}</button>`)(alertCount()) : ''}${isWide() ? `<button class="ib" onclick="toggleLayout()" title="${LAYOUT === 'mobile' ? 'Version ordinateur' : 'Version mobile'}">${ic(LAYOUT === 'mobile' ? 'monitor' : 'mobile', 's')}</button>` : ''}${F('assistant') ? `<button class="ib" onclick="openAssistant()" title="Assistant" style="background:var(--ink);color:#fff">${ic('spark', 's')}</button>` : ''}<button class="ib" onclick="logout()" title="Changer d'utilisateur">${ic('logout', 's')}</button></div>
   <main id="main"></main><div id="cartbar"></div>
   <nav class="bot">${tabs.map(([k, i, l, n]) => `<button class="${view === k || (k === 'plus' && !tabs.some(t => t[0] === view)) ? 'on' : ''}" onclick="go('${k}')">${ic(i)}${T(l)}${n ? `<span class="dot">${n}</span>` : ''}</button>`).join('')}</nav>`;
   (VIEWS[view] || VIEWS.vendre)();
@@ -697,6 +717,8 @@ function closeScanner() {
 // Étiquette Boutik = "P0007-0012" (produit P0007, étiquette n°12, unique). Code-barres fabricant = champ barcode.
 function resolveCode(raw) {
   raw = String(raw).trim();
+  const ml = raw.match(/^(P\d{4,})-L(\d+)$/i);
+  if (ml) { const p = db.products.find(x => x.code === ml[1].toUpperCase() && x.active), l = p && (p.lots || [])[+ml[2] - 1]; return p ? { p, unique: false, lot: l ? l.id : null } : null; }
   const m = raw.match(/^(P\d{4,})(?:-(C)?(\d+))?$/i);
   if (m) { const p = db.products.find(x => x.code === m[1].toUpperCase() && x.active); return p ? { p, unique: !!m[3], pack: !!m[2] && !!p.pack } : null; }
   const p = db.products.find(x => x.barcode && x.barcode === raw && x.active); return p ? { p, unique: false } : null;
@@ -777,7 +799,7 @@ function scanToCart() {
         if (r.unique) { if (cart.scanned.has(raw)) { if (manual) toast('Étiquette déjà scannée'); return; } cart.scanned.add(raw); }
         else if (!manual && SCAN.lastSeen[raw] && t - SCAN.lastSeen[raw] < 1800) { SCAN.lastSeen[raw] = t; return; }
         SCAN.lastSeen[raw] = t;
-        addToCart(r.p.id, 1, manual ? 'manuel' : 'scan', r.pack ? 'pack' : 'u'); added++;
+        addToCart(r.p.id, 1, manual ? 'manuel' : 'scan', r.pack ? 'pack' : 'u'); if (r.lot) { const it = cart.items.find(i => i.pid === r.p.id && i.mode === 'u' && !i.ret); if (it) it.lotPref = r.lot; } added++;
       });
       if (added) { refreshScanPanel(); const p = document.querySelector('#scan .panel'); p.classList.remove('flash'); void p.offsetWidth; p.classList.add('flash'); }
     }
@@ -897,7 +919,9 @@ function checkout() {
   if (payMode === 'momo') { sale.op = v('momoOp'); sale.ref = v('momoRef'); if (F('momoRef') && !sale.ref) return toast('Saisissez le n° de transaction Mobile Money'); }
   if (payMode === 'credit') { sale.client = v('cliName'); sale.tel = v('cliTel'); if (!sale.client) return toast('Indiquez le nom du client'); }
   if (payMode === 'cash') sale.given = +v('given') || 0;
-  sale.items.forEach(i => { const p = prod(i.pid), q = i.qty * (i.mult || 1); if (p) { p.stock -= q; move(p.id, -q, 'vente', 'Vente n°' + sale.no); } });
+  sale.items.forEach(i => { const p = prod(i.pid), q = i.qty * (i.mult || 1); if (!p) return; p.stock -= q;
+    if (q >= 0) { const al = moveOut(p, q, 'vente', 'Vente n°' + sale.no, i.lotPref); if (al) i.lots = al; else delete i.lots; }
+    else { moveBack(p, -q, 'retour', 'Retour vente n°' + (cart.ret ? cart.ret.no : sale.no), i.lots); delete i.lots; } delete i.lotPref; });
   if (cart.ret) { const o = db.sales.find(x => x.id === cart.ret.sid); sale.retOf = cart.ret.no; if (o) { o.retQ = o.retQ || {}; cart.ret.lines.forEach(l => o.retQ[l.k] = (o.retQ[l.k] || 0) + l.q); o.returned = true; } }
   db.sales.unshift(sale);
   log(sale.retOf ? 'Retour / échange' : 'Vente', sale.retOf ? `n°${sale.no} sur la vente n°${sale.retOf} — ${sale.total < 0 ? 'remboursé ' + money(-sale.total) : 'payé ' + money(sale.total)} (${PAY[sale.pay]})` : `n°${sale.no} — ${money(sale.total)} (${PAY[sale.pay]})`);
@@ -1001,7 +1025,7 @@ async function requestCancel(id) {
 }
 function doCancel(s, why) {
   s.cancelled = true; s.cancelReason = why; s.cancelBy = 'owner'; s.cancelDate = now(); delete s.cancelReq;
-  s.items.forEach(i => { const p = prod(i.pid), q = i.qty * (i.mult || 1); if (p) { p.stock += q; move(p.id, q, 'annulation', 'Vente n°' + s.no); } });
+  s.items.forEach(i => { const p = prod(i.pid), q = i.qty * (i.mult || 1); if (!p) return; p.stock += q; if (q >= 0) moveBack(p, q, 'annulation', 'Vente n°' + s.no, i.lots); else moveOut(p, -q, 'annulation', 'Vente n°' + s.no); });
   log('Vente annulée', `n°${s.no} de ${userName(s.user)} — ${money(s.total)} — ${why}`); save(); closeModal(); render(); toast('Vente annulée, stock remis');
 }
 async function cancelSale(id) { const s = db.sales.find(x => x.id === id); const why = await ask(`Annuler la vente n°${s.no} (${money(s.total)}) ?`, { input: 1, ph: 'Motif', ok: 'Annuler la vente', danger: true, sub: 'Le stock sera remis.' }); if (why === null) return; doCancel(s, why || 'Sans motif'); }
@@ -1275,7 +1299,9 @@ function editProduct(id) {
         <div class="g2" style="margin-top:6px"><div ${F('gros') ? '' : 'hidden'}><label class="f">Prix de gros (unité)</label><input id="pgr" inputmode="numeric" value="${p?.wholesale || ''}" placeholder="Facultatif"></div><div ${F('nego') ? '' : 'hidden'}><label class="f">Prix minimum négociable</label><input id="pmn" inputmode="numeric" value="${p?.minPrice || ''}" placeholder="Facultatif"></div></div>
         <div class="mut" style="margin-top:6px">Le vendeur peut négocier jusqu'au prix minimum sans votre code.</div>
       </div></details>
-    ${F('peremption') ? `<label class="f">Date de péremption (la plus proche)</label><input id="pex" type="date" value="${esc(p?.exp || '')}">` : ''}
+    ${F('peremption') && !(F('lots') && p?.lots?.length) ? `<label class="f">Date de péremption (la plus proche)</label><input id="pex" type="date" value="${esc(p?.exp || '')}">` : ''}
+    <label class="f">Stock maximum (alerte de surstock, facultatif)</label><input id="pmax" inputmode="numeric" value="${p?.max || ''}" placeholder="Ex : 50">
+    ${F('lots') && p && (p.lots || []).length ? `<label class="f">Lots en stock</label><div class="card list" style="padding:2px 14px;margin:0">${lotsOf(p, true).map(l => `<div class="it"><div class="grow"><b>${esc(l.no)}</b><div class="mut">${l.exp ? 'Périme le ' + new Date(l.exp + 'T12:00').toLocaleDateString('fr-FR') : 'Sans date'} · reçu le ${new Date(l.date).toLocaleDateString('fr-FR')}</div></div><span class="pill ${l.q > 0 ? '' : 'bad'}">${nq(l.q)}</span><button class="btn ghost sm" onclick="lotLabel('${p.id}',${l.n})">${ic('tag', 's')}</button></div>`).join('')}</div>${(() => { const sans = Math.round((p.stock - lotsOf(p).reduce((a, l) => a + l.q, 0)) * 1000) / 1000; return sans > 0 ? `<div class="mut" style="margin-top:6px">${nq(sans)} sans n° de lot (stock d'avant)</div>` : ''; })()}` : ''}
     <label class="f">Code-barres du fabricant (facultatif)</label><div class="row"><input id="pbc" class="grow" value="${esc(p?.barcode)}" placeholder="Scannez ou tapez"><button class="btn acc sm" style="min-height:50px" onclick="scanBarcodeInto()">${ic('scan', 's')}</button></div>
     <button class="btn full xl" style="margin-top:16px" onclick="saveProduct('${p?.id || ''}')">Enregistrer</button>
     ${p ? `<div class="g2" style="margin-top:10px"><button class="btn ghost sm" onclick="adjustStock('${p.id}')">± Corriger le stock</button><button class="btn ghost sm" onclick="labelsFor('${p.id}')">${ic('tag', 's')} Étiquettes</button><button class="btn ghost sm" onclick="productHistory('${p.id}')">${ic('history', 's')} Historique</button><button class="btn ghost sm" style="color:var(--bad)" onclick="archiveProduct('${p.id}')">${ic('trash', 's')} Supprimer</button></div>` : ''}`);
@@ -1342,6 +1368,12 @@ function pickVariant(mid) {
   modal(esc(f.mName), `<div class="mut" style="margin-bottom:10px">${money(f.price)} · touchez la taille et la couleur</div>
     ${colors.map(c => `${c ? `<h3 style="margin:12px 4px 8px">${esc(c)}</h3>` : ''}<div class="g3">${sizes.map(z => { const p = vs.find(x => (x.color || '') === c && (x.size || '') === z); return p ? `<button class="btn ${p.stock > 0 ? 'ghost' : 'soft'} col" style="${p.stock > 0 ? '' : 'opacity:.5'}" onclick="closeModal();addToCart('${p.id}',1,'manuel');VIEWS.vendre()"><b style="font-size:18px">${esc(z)}</b><small>${p.stock > 0 ? nq(p.stock) + ' en stock' : T('Rupture')}</small></button>` : ''; }).join('')}</div>`).join('')}`);
 }
+function lotLabel(pid, n) {
+  const p = prod(pid), l = (p.lots || [])[n - 1]; if (!l) return; const code = `${p.code}-L${n}`;
+  const body = `<div style="width:62mm;border:1px dashed #999;padding:4mm;font:12px system-ui;text-align:center;margin:4mm auto">${QR.svg(code, 4)}<div style="font-weight:800;font-size:14px;margin-top:2mm">${esc(p.name)}</div><div>Lot ${esc(l.no)}${l.exp ? ' · périme le ' + new Date(l.exp + 'T12:00').toLocaleDateString('fr-FR') : ''}</div><div style="color:#666">${code}</div></div>`;
+  if (NATIVE) return download(`lot-${code}.html`, `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${body}${body}</body></html>`, 'text/html');
+  document.getElementById('printArea').innerHTML = body + body; closeModal(); setTimeout(() => { try { window.print(); } catch (e) {} }, 300);
+}
 function setPhoto(inp) {
   const f = inp.files && inp.files[0]; if (!f) return;
   const img = new Image(); img.onload = () => { const s = 240, c = document.createElement('canvas'), k = Math.min(1, s / Math.max(img.width, img.height)); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); window._photo = c.toDataURL('image/jpeg', .72); const el = document.getElementById('pph'); el.style.backgroundImage = `url(${window._photo})`; el.querySelector('svg')?.remove(); URL.revokeObjectURL(img.src); };
@@ -1355,6 +1387,7 @@ function saveProduct(id) {
     pack: num(v('pkq')) > 0 && +v('pkp') > 0 ? { name: v('pkn') || 'Carton', qty: num(v('pkq')), price: +v('pkp') } : null };
   if (window._photo !== undefined) data.photo = window._photo;
   if (document.getElementById('pex')) data.exp = v('pex');
+  data.max = +v('pmax') || 0;
   if (data.minPrice && data.minPrice > data.price) return toast('Le prix minimum doit être inférieur au prix de vente');
   if (data.barcode && db.products.some(x => x.barcode === data.barcode && x.id !== id && x.active)) return toast('Ce code-barres est déjà utilisé');
   if (id) { const p = prod(id), old = p.price; Object.assign(p, data); log('Produit modifié', name + (old !== p.price ? ` — prix ${nf(old)} → ${nf(p.price)}` : '')); }
@@ -1374,13 +1407,13 @@ function productHistory(id) {
   const p = prod(id), mv = db.moves.filter(m => m.pid === id).slice(0, 80);
   modal(esc(p.name), mv.length ? `<div class="card list" style="padding:4px 16px">${mv.map(m => `<div class="it"><div class="grow"><b>${esc(m.type)}</b><div class="mut">${fmtDate(m.date)} · ${esc(userName(m.user))}${m.note ? ' · ' + esc(m.note) : ''}</div></div><b class="num" style="color:${m.qty < 0 ? 'var(--bad)' : 'var(--ok)'}">${m.qty > 0 ? '+' : ''}${nq(m.qty)}</b></div>`).join('')}</div>` : emptyBox('history', 'Aucun mouvement'));
 }
-let recv = {};
-function receiveStock() { recv = {}; modal('Réception de marchandise', recvHtml()); }
+let recv = {}, recvLot = {};
+function receiveStock() { recv = {}; recvLot = {}; modal('Réception de marchandise', recvHtml()); }
 function recvHtml() {
   const ids = Object.keys(recv);
   return `<p class="mut" style="margin-top:0">Scannez ou choisissez les produits reçus, puis validez.</p>
     <div class="row"><select id="rsel" class="grow"><option value="">Choisir un produit</option>${db.products.filter(p => p.active).map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select><button class="btn sm" style="min-height:50px" onclick="if(v('rsel')){recv[v('rsel')]=(recv[v('rsel')]||0)+1;recvRedraw()}">${ic('plus', 's')}</button><button class="btn acc sm" style="min-height:50px" onclick="scanReceive()">${ic('scan', 's')}</button></div>
-    <div class="card list" style="padding:4px 16px;margin-top:12px">${ids.map(id => { const p = prod(id); return `<div class="it"><div class="grow"><b>${esc(p.name)}</b><div class="mut">${nq(p.stock)} → ${nq(p.stock + recv[id])}${UNITS[p.unit] ? ' ' + UNITS[p.unit] : ''}</div>${p.pack ? `<button class="chip" style="margin-top:6px" onclick="recv['${id}']+=${p.pack.qty};recvRedraw()">+1 ${esc(p.pack.name)} (${nq(p.pack.qty)})</button>` : ''}</div><input style="width:90px" inputmode="decimal" value="${nq(recv[id])}" onchange="recv['${id}']=parseFloat(this.value.replace(',','.'))||0"></div>`; }).join('') || '<div class="empty">Rien pour l\'instant</div>'}</div>
+    <div class="card list" style="padding:4px 16px;margin-top:12px">${ids.map(id => { const p = prod(id); return `<div class="it"><div class="grow"><b>${esc(p.name)}</b><div class="mut">${nq(p.stock)} → ${nq(p.stock + recv[id])}${UNITS[p.unit] ? ' ' + UNITS[p.unit] : ''}</div>${p.pack ? `<button class="chip" style="margin-top:6px" onclick="recv['${id}']+=${p.pack.qty};recvRedraw()">+1 ${esc(p.pack.name)} (${nq(p.pack.qty)})</button>` : ''}</div><input style="width:90px" inputmode="decimal" value="${nq(recv[id])}" onchange="recv['${id}']=parseFloat(this.value.replace(',','.'))||0"></div>${F('lots') ? `<div class="g2" style="padding:0 0 12px"><input id="rl_${id}" placeholder="N° de lot" value="${esc((recvLot[id] || {}).no || '')}" oninput="(recvLot['${id}']=recvLot['${id}']||{}).no=this.value"><input id="rx_${id}" type="date" title="Péremption du lot" value="${esc((recvLot[id] || {}).exp || '')}" oninput="(recvLot['${id}']=recvLot['${id}']||{}).exp=this.value"></div>` : ''}`; }).join('') || '<div class="empty">Rien pour l\'instant</div>'}</div>
     ${F('fournisseurs') ? `<label class="f">Fournisseur</label><select id="rsup"><option value="">— Aucun —</option>${db.suppliers.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}<option value="+">＋ Nouveau fournisseur…</option></select>
       <div class="g2"><div><label class="f">Montant de la facture</label><input id="ramt" inputmode="numeric" value="${Math.round(ids.reduce((a, id) => a + recv[id] * prod(id).cost, 0))}"></div><div><label class="f">Payé maintenant</label><input id="rpaid" inputmode="numeric" placeholder="0 = à crédit"></div></div>
       <label class="f">Payé avec</label><select id="rmeth"><option value="autre">Hors caisse (poche, banque)</option><option value="cash">L'argent de la caisse</option><option value="momo">Mobile Money</option></select>` : ''}
@@ -1401,7 +1434,9 @@ async function doReceive() {
   if (sup && paid && meth === 'cash' && !(await ownerAuth(`Payer ${money(paid)} au fournisseur avec la caisse`))) return;
   if (sup) { db.supplies.unshift({ id: uid(), date: now(), supplier: sup, amount: amt, paid, method: meth, note, user: me.id, lines: Object.entries(recv).map(([id, q]) => ({ pid: id, qty: q })) });
     if (paid && meth === 'cash') db.expenses.unshift({ id: uid(), date: now(), cat: 'Achat fournisseur', detail: supName(sup), amount: paid, method: 'cash', user: me.id }); }
-  Object.entries(recv).forEach(([id, q]) => { if (q > 0) { prod(id).stock += q; move(id, q, 'entrée', note || 'Réception'); n += q; } });
+  Object.entries(recv).forEach(([id, q]) => { if (!(q > 0)) return; const p = prod(id), L = recvLot[id] || {}; p.stock += q; let lid = null;
+    if (F('lots') && (String(L.no || '').trim() || L.exp)) { lid = uid(); (p.lots = p.lots || []).push({ id: lid, no: String(L.no || '').trim() || ('Lot ' + ((p.lots || []).length + 1)), exp: L.exp || '', date: now() }); }
+    move(id, q, 'entrée', (note || 'Réception') + (lid ? ' — lot ' + p.lots[p.lots.length - 1].no : ''), lid); if (lid) syncExp(p); n += q; });
   log('Réception de marchandise', `${nq(n)} article(s)${sup ? ' — ' + supName(sup) + (amt - paid > 0 ? ' — dette ' + money(amt - paid) : '') : ''}${note ? ' — ' + note : ''}`); save(); closeModal(); render(); toast('Stock mis à jour');
 }
 
@@ -1466,15 +1501,279 @@ function makeLabels(mode) {
   } else { document.getElementById('printArea').innerHTML = body; closeModal(); setTimeout(() => { try { window.print(); } catch (e) {} toast('Si rien ne s\'ouvre, utilisez « Télécharger »'); }, 300); }
 }
 async function download(name, content, type) {
+  if (NATIVE && content instanceof Uint8Array && NATIVE.shareFiles) { try { await NATIVE.shareFiles([{ name, base64: u8b64(content) }]); } catch (e) { if (!/cancel/i.test(String(e && e.message))) toast('Partage impossible'); } return; }
   if (NATIVE && NATIVE.saveFile) { try { await NATIVE.saveFile(name, content); } catch (e) { if (!/cancel/i.test(String(e && e.message))) toast('Partage impossible'); } return; }
   try { if (window.claude && window.claude.use) { const dl = await claude.use('downloads'); if (dl) { await dl.save({ filename: name, data: content }); return; } } } catch (e) { return; }
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([content], { type })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 
+/* ================= CENTRE D'ALERTES ================= */
+const ALERT_DEF = { stockBas: true, surstock: true, perte: true, remise: true, remiseSeuil: 2000, ecart: true, ecartSeuil: 500, annulation: true, retour: true, horaires: false, de: '07:00', a: '21:00', fermeture: false, heureFermeture: '21:30', dormant: true, dormantJours: 30, matin: true };
+const alertCfg = () => Object.assign({}, ALERT_DEF, db.settings.alerts || {});
+const hmOf = d => { const x = new Date(d); return String(x.getHours()).padStart(2, '0') + ':' + String(x.getMinutes()).padStart(2, '0'); };
+function computeAlerts() {
+  const c = alertCfg(), out = [], d7 = new Date(Date.now() - 7 * 864e5).toISOString(), act = db.products.filter(p => p.active), add = (lvl, grp, title, detail, fn) => out.push({ lvl, grp, title, detail, fn });
+  if (c.stockBas) { act.filter(p => p.stock <= 0).forEach(p => add('bad', 'Stock', `Rupture : ${p.name}`, 'Plus aucun article', `editProduct('${p.id}')`)); act.filter(p => p.stock > 0 && p.min > 0 && p.stock <= p.min).forEach(p => add('warn', 'Stock', `Stock bas : ${p.name}`, `Il en reste ${nq(p.stock)} (alerte à ${nq(p.min)})`, `editProduct('${p.id}')`)); }
+  if (c.surstock) act.filter(p => p.max > 0 && p.stock > p.max).forEach(p => add('warn', 'Stock', `Surstock : ${p.name}`, `${nq(p.stock)} en stock pour un maximum de ${nq(p.max)} : argent immobilisé`, `editProduct('${p.id}')`));
+  if (F('peremption') || F('lots')) act.filter(p => p.exp && p.stock > 0 && daysTo(p.exp) <= EXP_DAYS).forEach(p => { const dd = daysTo(p.exp); add(dd < 0 ? 'bad' : 'warn', 'Stock', `${dd < 0 ? 'Périmé' : 'Périme dans ' + dd + ' j'} : ${p.name}`, `${nq(p.stock)} en stock`, `editProduct('${p.id}')`); });
+  if (c.dormant) { const lim = new Date(Date.now() - (+c.dormantJours || 30) * 864e5).toISOString(), sold = new Set(db.moves.filter(m => m.type === 'vente' && m.date >= lim).map(m => m.pid)), first = {}; db.moves.forEach(m => { if (!first[m.pid] || m.date < first[m.pid]) first[m.pid] = m.date; });
+    const dor = act.filter(p => p.stock > 0 && !sold.has(p.id) && first[p.id] && first[p.id] < lim); if (dor.length) add('info', 'Stock', `${dor.length} produit(s) ne se vendent plus`, `Aucune vente depuis ${c.dormantJours} jours : ${dor.slice(0, 4).map(p => p.name).join(', ')}${dor.length > 4 ? '…' : ''}`, `go('stock')`); }
+  const recent = db.sales.filter(s => !s.cancelled && s.date >= d7);
+  if (c.perte) recent.forEach(s => { const l = s.items.filter(i => i.qty > 0 && i.cost > 0 && i.price < i.cost); if (l.length) add('bad', 'Ventes', `Vente à perte n°${s.no} (${userName(s.user)})`, l.map(i => `${i.name} à ${money(i.price)}, acheté ${money(i.cost)}`).join(' · '), `showReceipt(db.sales.find(x=>x.id==='${s.id}'))`); });
+  if (c.remise) recent.filter(s => s.discount >= (+c.remiseSeuil || 0) && s.discount > 0).forEach(s => add('warn', 'Ventes', `Remise de ${money(s.discount)} (vente n°${s.no})`, `${userName(s.user)} · ${fmtDate(s.date)}`, `showReceipt(db.sales.find(x=>x.id==='${s.id}'))`));
+  if (c.retour) recent.filter(s => s.retOf).forEach(s => add('info', 'Ventes', `Retour / échange sur la vente n°${s.retOf}`, `${userName(s.user)} · ${s.total < 0 ? 'remboursé ' + money(-s.total) : 'payé ' + money(s.total)}`, `showReceipt(db.sales.find(x=>x.id==='${s.id}'))`));
+  if (c.horaires) recent.filter(s => { const h = hmOf(s.date); return h < c.de || h > c.a; }).forEach(s => add('warn', 'Ventes', `Vente à ${hmOf(s.date)}, hors horaires`, `N°${s.no} par ${userName(s.user)} · ${money(s.total)}`, `showReceipt(db.sales.find(x=>x.id==='${s.id}'))`));
+  if (c.annulation) db.sales.filter(s => s.cancelReq && !s.cancelled).forEach(s => add('bad', 'Ventes', `Demande d'annulation (vente n°${s.no})`, `${userName(s.cancelReq.by)} : ${s.cancelReq.reason}`, `go('controle')`));
+  if (c.ecart) db.shifts.filter(s => s.end && s.end >= d7 && s.diff < 0 && -s.diff >= (+c.ecartSeuil || 0)).forEach(s => add('bad', 'Caisses', `Caisse de ${userName(s.user)} : manque ${money(-s.diff)}`, `Fermée le ${fmtDate(s.end)}`, `go('controle')`));
+  if (c.fermeture && hmOf(now()) >= c.heureFermeture) db.shifts.filter(s => s.status === 'ouvert').forEach(s => add('warn', 'Caisses', `Caisse de ${userName(s.user)} pas fermée`, `Ouverte depuis ${fmtDate(s.start)} ; fermeture prévue à ${c.heureFermeture}`, `go('controle')`));
+  if (F('momo') && F('momoCheck')) { const n = momoPending().length; if (n) add('warn', 'Ventes', `${n} paiement(s) Mobile Money à vérifier`, 'Comparez avec vos SMS', `go('momo')`); }
+  const sb = SYNC.cfg && SYNC.cfg.sub; if (sb && (sb.blocked || sb.daysLeft <= 7)) add(sb.blocked ? 'bad' : 'warn', 'Abonnement', sb.blocked ? 'Synchronisation arrêtée' : `Abonnement : plus que ${sb.daysLeft} jour(s)`, 'Paramètres → Mon abonnement', `go('reglages')`);
+  return out;
+}
+const alertCount = () => { try { return isOwner() ? computeAlerts().filter(a => a.lvl !== 'info').length : 0; } catch (e) { return 0; } };
+VIEWS.alertes = function () {
+  if (!isOwner()) return go('vendre');
+  const A = computeAlerts(), c = alertCfg(), groups = [...new Set(A.map(a => a.grp))], col = { bad: 'bad', warn: 'warn', info: '' };
+  const sw = (k, t, d, extra) => `<label class="it" style="cursor:pointer;flex-wrap:wrap"><div class="grow"><b>${t}</b><div class="mut">${d}</div></div><span class="sw"><input type="checkbox" ${c[k] ? 'checked' : ''} onchange="setAlert('${k}',this.checked)"><span></span></span>${extra ? `<div style="flex-basis:100%;display:${c[k] ? 'flex' : 'none'};gap:8px;align-items:center;margin-top:8px">${extra}</div>` : ''}</label>`;
+  const inp = (k, type, w) => `<input type="${type}" value="${esc(c[k])}" style="width:${w || 110}px;min-height:40px" ${type === 'number' ? 'inputmode="numeric"' : ''} onchange="setAlert('${k}',this.type==='number'?+this.value:this.value)">`;
+  main().innerHTML = `<h1>Alertes</h1>
+    ${A.length ? groups.map(g => `<h3>${g}</h3><div class="card list" style="padding:4px 16px">${A.filter(a => a.grp === g).map(a => `<div class="it tap" onclick="${a.fn}"><div class="ico ${col[a.lvl]}">${ic(a.lvl === 'bad' ? 'alert' : a.lvl === 'warn' ? 'clock' : 'eye')}</div><div class="grow"><b>${esc(a.title)}</b><div class="mut">${esc(a.detail)}</div></div>${ic('chev', 's')}</div>`).join('')}</div>`).join('')
+      : `<div class="card row"><div class="ico ok">${ic('check')}</div><div class="grow"><b>Aucune alerte</b><div class="mut">Tout va bien dans la boutique.</div></div></div>`}
+    <h3>Sur ce téléphone</h3>${pushCard()}
+    <h3>Vos règles</h3>
+    <div class="card list" style="padding:4px 16px">
+      ${sw('stockBas', 'Stock bas et ruptures', 'Seuil réglé dans chaque produit')}
+      ${sw('surstock', 'Surstock', 'Quand un produit dépasse son stock maximum (réglé dans chaque produit)')}
+      ${sw('perte', 'Vente à perte', 'Un article vendu moins cher que son prix d\'achat')}
+      ${sw('remise', 'Grosse remise', 'À partir de :', inp('remiseSeuil', 'number', 120) + ' ' + esc(cur()))}
+      ${sw('ecart', 'Manque dans une caisse', 'À partir de :', inp('ecartSeuil', 'number', 120) + ' ' + esc(cur()))}
+      ${sw('fermeture', 'Caisse pas fermée à l\'heure', 'Heure limite :', inp('heureFermeture', 'time'))}
+      ${sw('horaires', 'Vente hors horaires', 'Boutique ouverte de … à … :', inp('de', 'time') + ' – ' + inp('a', 'time'))}
+      ${sw('annulation', 'Demandes d\'annulation', 'Un vendeur veut annuler une vente')}
+      ${sw('retour', 'Retours et échanges', 'Chaque retour d\'article')}
+      ${sw('dormant', 'Produits qui ne se vendent plus', 'Sans vente depuis (jours) :', inp('dormantJours', 'number', 90))}
+      ${sw('matin', 'Point du matin', 'Chaque matin vers 8 h sur le téléphone : ruptures, stock bas, péremptions')}
+    </div>`;
+};
+function setAlert(k, val) { db.settings.alerts = Object.assign(alertCfg(), { [k]: val }); log('Règle d\'alerte modifiée', k + ' = ' + val); save(); VIEWS.alertes(); }
+/* Notifications : Web Push (version web installée) ou Firebase (application des stores) */
+const PUSH_K = () => kf('boutik_push');
+function pushOn() { try { return localStorage.getItem(PUSH_K()) === '1'; } catch (e) { return false; } }
+function pushCard() {
+  if (!SYNC.cfg) return `<div class="card row"><div class="ico">${ic('phone')}</div><div class="grow mut">Pour recevoir les alertes même appli fermée, mettez d'abord la boutique en ligne (Paramètres → Suivi à distance).</div></div>`;
+  const native = NATIVE && NATIVE.push, web = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  if (!native && !web) return `<div class="card row"><div class="ico">${ic('phone')}</div><div class="grow mut">Ce navigateur ne reçoit pas de notifications. Sur iPhone : ouvrez Boutik dans Safari → Partager → « Sur l'écran d'accueil », puis ouvrez-le depuis l'icône.</div></div>`;
+  return pushOn() ? `<div class="card"><div class="row"><div class="ico ok">${ic('check')}</div><div class="grow"><b>Notifications activées</b><div class="mut">Les alertes de la boutique arrivent sur ce téléphone, même appli fermée.</div></div></div>
+      <div class="g2" style="margin-top:12px"><button class="btn ghost" onclick="pushTest()">Envoyer un essai</button><button class="btn soft" onclick="pushOff()">Désactiver</button></div></div>`
+    : `<div class="card"><div class="row"><div class="ico acc">${ic('phone')}</div><div class="grow"><b>Recevoir les alertes sur ce téléphone</b><div class="mut">Manque dans une caisse, vente à perte, rupture… vous êtes prévenu tout de suite, même quand l'appli est fermée.</div></div></div>
+      <button class="btn acc full" style="margin-top:12px" onclick="pushEnable()">Activer les notifications</button></div>`;
+}
+const vapidBytes = k => { const s = atob(k.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((k.length + 3) % 4)); return Uint8Array.from(s, c => c.charCodeAt(0)); };
+async function pushEnable() {
+  try {
+    const base = { shop: SYNC.cfg.shop, key: SYNC.cfg.key, device: SYNC.cfg.device };
+    if (NATIVE && NATIVE.push) { const token = await NATIVE.push.register(); await api('/api/push/subscribe', { ...base, fcm: token }); }
+    else {
+      const perm = await Notification.requestPermission(); if (perm !== 'granted') return toast('Notifications refusées : autorisez-les dans les réglages du téléphone');
+      const c = await pubCfg(); if (!c || !c.vapid) return toast('Serveur injoignable');
+      const reg = await navigator.serviceWorker.register('/sw.js'); await navigator.serviceWorker.ready;
+      const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidBytes(c.vapid) });
+      await api('/api/push/subscribe', { ...base, sub: sub.toJSON() });
+    }
+    try { localStorage.setItem(PUSH_K(), '1'); } catch (e) {}
+    log('Notifications activées'); save(); render(); toast('Notifications activées'); pushTest(true);
+  } catch (e) { toast(e.status === 403 ? 'Boutique non reconnue par le serveur' : 'Activation impossible : ' + (e.message || 'réessayez')); }
+}
+async function pushTest(silent) { try { const j = await api('/api/push/test', { shop: SYNC.cfg.shop, key: SYNC.cfg.key }); if (!silent) toast(j.sent ? 'Essai envoyé' : 'Aucun téléphone abonné'); } catch (e) { if (!silent) toast('Pas de connexion'); } }
+async function pushOff() {
+  try { await api('/api/push/unsubscribe', { shop: SYNC.cfg.shop, key: SYNC.cfg.key, device: SYNC.cfg.device }); } catch (e) {}
+  try { const reg = await navigator.serviceWorker?.getRegistration(); const s = await reg?.pushManager.getSubscription(); await s?.unsubscribe(); } catch (e) {}
+  try { localStorage.removeItem(PUSH_K()); } catch (e) {} render(); toast('Notifications désactivées');
+}
+
+/* ================= DOSSIER COMPTABLE DU MOIS ================= */
+// Écrit un vrai fichier Excel (.xlsx) et un PDF sans aucune bibliothèque : fonctionne hors connexion.
+const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+function monthKey(d) { const x = new Date(d); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0'); }
+function monthLabel(k) { const [y, m] = k.split('-'); return MOIS[+m - 1] + ' ' + y; }
+function monthRange(k) { const [y, m] = k.split('-').map(Number); return [new Date(y, m - 1, 1).toISOString(), new Date(y, m, 1).toISOString()]; }
+function comptaData(k) {
+  const [a, b] = monthRange(k), inM = d => d >= a && d < b;
+  const all = db.sales.filter(s => inM(s.date)), sales = all.filter(s => !s.cancelled), canc = all.filter(s => s.cancelled);
+  const costOf = s => s.items.reduce((x, i) => x + i.qty * (i.cost || 0), 0);
+  const ca = sales.reduce((x, s) => x + s.total, 0), cogs = sales.reduce((x, s) => x + costOf(s), 0), disc = sales.reduce((x, s) => x + (s.discount || 0), 0);
+  const by = { cash: 0, momo: 0, credit: 0 }; sales.forEach(s => by[s.pay] = (by[s.pay] || 0) + s.total);
+  const exps = db.expenses.filter(e => !e.deleted && inM(e.date)), opex = exps.filter(e => e.cat !== 'Achat fournisseur');
+  const dep = opex.reduce((x, e) => x + e.amount, 0);
+  const repay = db.payments.filter(p => inM(p.date));
+  const supM = db.supplies.filter(x => inM(x.date)), supPM = db.supPays.filter(x => inM(x.date));
+  const sup = db.suppliers.map(x => { const due = db.supplies.filter(y => y.supplier === x.id && y.date < b).reduce((t, y) => t + y.amount - y.paid, 0), paid = db.supPays.filter(y => y.supplier === x.id && y.date < b).reduce((t, y) => t + y.amount, 0);
+    return { name: x.name, bought: supM.filter(y => y.supplier === x.id).reduce((t, y) => t + y.amount, 0), paidM: supM.filter(y => y.supplier === x.id).reduce((t, y) => t + y.paid, 0) + supPM.filter(y => y.supplier === x.id).reduce((t, y) => t + y.amount, 0), bal: due - paid }; }).filter(x => x.bought || x.paidM || x.bal);
+  const cli = clientNames().map(n => { const due = db.sales.filter(s => s.pay === 'credit' && !s.cancelled && s.client === n && s.date < b).reduce((t, s) => t + s.total, 0), paid = db.payments.filter(p => p.client === n && p.date < b).reduce((t, p) => t + p.amount, 0);
+    return { n, soldM: sales.filter(s => s.pay === 'credit' && s.client === n).reduce((t, s) => t + s.total, 0), paidM: repay.filter(p => p.client === n).reduce((t, p) => t + p.amount, 0), bal: due - paid }; }).filter(x => x.soldM || x.paidM || x.bal);
+  const after = {}; db.moves.forEach(m => { if (m.date >= b) after[m.pid] = (after[m.pid] || 0) + m.qty; });
+  const stock = db.products.filter(p => p.active || (after[p.id] || 0)).map(p => { const q = Math.round((p.stock - (after[p.id] || 0)) * 1000) / 1000; return { code: p.code, name: p.name, cat: p.cat, q, cost: p.cost, price: p.price, val: Math.max(0, q) * p.cost }; }).filter(x => x.q);
+  const shifts = db.shifts.filter(s => s.end && inM(s.end));
+  const days = {}; sales.forEach(s => { const d = s.date.slice(0, 10), x = days[d] || (days[d] = { n: 0, cash: 0, momo: 0, credit: 0, ca: 0, rep: 0 }); x.n++; x[s.pay] += s.total; x.ca += s.total; });
+  repay.forEach(p => { const d = p.date.slice(0, 10), x = days[d] || (days[d] = { n: 0, cash: 0, momo: 0, credit: 0, ca: 0, rep: 0 }); x.rep += p.amount; });
+  const depCat = {}; opex.forEach(e => depCat[e.cat] = (depCat[e.cat] || 0) + e.amount);
+  return { k, a, b, sales, canc, ca, cogs, disc, by, marge: ca - cogs, exps, dep, depCat, res: ca - cogs - dep, repay, repayT: repay.reduce((t, p) => t + p.amount, 0), supM, sup, cli, stock, stockVal: stock.reduce((t, x) => t + x.val, 0), shifts, days, costOf,
+    achats: supM.reduce((t, x) => t + x.amount, 0), ecarts: shifts.reduce((t, s) => t + (s.diff || 0), 0) };
+}
+/* ---- XLSX minimal (zip sans compression) ---- */
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(u) { let c = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) c = CRC[(c ^ u[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function zip(files) {
+  const enc = new TextEncoder(), parts = [], cen = []; let off = 0;
+  const w16 = (a, v) => a.push(v & 255, (v >>> 8) & 255), w32 = (a, v) => a.push(v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255);
+  files.forEach(([name, txt]) => {
+    const nm = enc.encode(name), data = typeof txt === 'string' ? enc.encode(txt) : txt, c = crc32(data), h = [];
+    w32(h, 0x04034b50); w16(h, 20); w16(h, 0x0800); w16(h, 0); w16(h, 0); w16(h, 0x21); w32(h, c); w32(h, data.length); w32(h, data.length); w16(h, nm.length); w16(h, 0);
+    const hh = new Uint8Array(h); parts.push(hh, nm, data);
+    const z = []; w32(z, 0x02014b50); w16(z, 20); w16(z, 20); w16(z, 0x0800); w16(z, 0); w16(z, 0); w16(z, 0x21); w32(z, c); w32(z, data.length); w32(z, data.length); w16(z, nm.length); w16(z, 0); w16(z, 0); w16(z, 0); w16(z, 0); w32(z, 0); w32(z, off);
+    cen.push(new Uint8Array(z), nm); off += hh.length + nm.length + data.length;
+  });
+  const cs = cen.reduce((t, x) => t + x.length, 0), e = []; w32(e, 0x06054b50); w16(e, 0); w16(e, 0); w16(e, files.length); w16(e, files.length); w32(e, cs); w32(e, off); w16(e, 0);
+  const all = [...parts, ...cen, new Uint8Array(e)], out = new Uint8Array(all.reduce((t, x) => t + x.length, 0)); let p = 0; all.forEach(x => { out.set(x, p); p += x.length; }); return out;
+}
+const xe = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
+const colL = i => { let s = ''; i++; while (i) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
+// feuille : { name, title, head: [...], rows: [[...]], widths: [...], total: [...] } ; nombres = cellules numériques
+function sheetXml(sh) {
+  const rows = []; let r = 1;
+  const cell = (v, c, st) => { const ref = colL(c) + r; if (v === '' || v == null) return st ? `<c r="${ref}" s="${st}"/>` : ''; return typeof v === 'number' && isFinite(v) ? `<c r="${ref}" s="${st || 2}"><v>${Math.round(v * 1000) / 1000}</v></c>` : `<c r="${ref}" t="inlineStr" s="${st || 0}"><is><t xml:space="preserve">${xe(v)}</t></is></c>`; };
+  if (sh.title) { rows.push(`<row r="${r}" ht="24" customHeight="1">${cell(sh.title, 0, 4)}</row>`); r++; if (sh.sub) { rows.push(`<row r="${r}">${cell(sh.sub, 0, 5)}</row>`); r++; } r++; }
+  rows.push(`<row r="${r}">${sh.head.map((h, i) => cell(h, i, 1)).join('')}</row>`); const hr = r; r++;
+  sh.rows.forEach(row => { rows.push(`<row r="${r}">${row.map((v, i) => cell(v, i)).join('')}</row>`); r++; });
+  if (sh.total) { rows.push(`<row r="${r}">${sh.total.map((v, i) => cell(v, i, typeof v === 'number' ? 3 : 6)).join('')}</row>`); r++; }
+  const cols = `<cols>${sh.head.map((_, i) => `<col min="${i + 1}" max="${i + 1}" width="${(sh.widths || [])[i] || 14}" customWidth="1"/>`).join('')}</cols>`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="${hr}" topLeftCell="A${hr + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>${cols}<sheetData>${rows.join('')}</sheetData></worksheet>`;
+}
+function xlsx(sheets) {
+  const names = sheets.map(s => s.name.replace(/[\[\]:*?/\\]/g, ' ').slice(0, 31));
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0"/></numFmts>
+<fonts count="4"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="15"/><name val="Calibri"/></font><font><i/><sz val="10"/><color rgb="FF6B7280"/><name val="Calibri"/></font></fonts>
+<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEDEFF3"/></patternFill></fill></fills>
+<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top style="thin"><color rgb="FF0D0F12"/></top><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="7"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="164" fontId="1" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1"/><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  return zip([
+    ['[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`],
+    ['_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+    ['xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${names.map((n, i) => `<sheet name="${xe(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets></workbook>`],
+    ['xl/_rels/workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
+    ['xl/styles.xml', styles],
+    ...sheets.map((s, i) => [`xl/worksheets/sheet${i + 1}.xml`, sheetXml(s)])]);
+}
+function comptaXlsx(D) {
+  const shop = db.settings.shopName, sub = `${shop}${db.settings.ncc ? ' · NCC ' + db.settings.ncc : ''} · ${monthLabel(D.k)} · montants en ${cur()}`;
+  const dt = d => new Date(d).toLocaleDateString('fr-FR'), hm = d => new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const S = [];
+  S.push({ name: 'Synthèse', title: 'Synthèse du mois — ' + monthLabel(D.k), sub, head: ['Rubrique', 'Montant'], widths: [46, 18], rows: [
+    ['Chiffre d\'affaires (ventes encaissées et à crédit)', D.ca], ['Nombre de ventes', D.sales.length], ['dont remises accordées', D.disc], ['Coût d\'achat des marchandises vendues', D.cogs], ['Marge brute', D.marge],
+    ['Dépenses (hors achats de marchandises)', D.dep], ['Résultat du mois (marge − dépenses)', D.res], ['', ''],
+    ['Encaissé en espèces', D.by.cash || 0], ['Encaissé par Mobile Money', D.by.momo || 0], ['Vendu à crédit', D.by.credit || 0], ['Remboursements de crédits reçus', D.repayT], ['', ''],
+    ['Achats de marchandises (fournisseurs)', D.achats], ['Dettes fournisseurs en fin de mois', D.sup.reduce((t, x) => t + x.bal, 0)], ['Crédits clients à recevoir en fin de mois', D.cli.reduce((t, x) => t + x.bal, 0)],
+    ['Valeur du stock en fin de mois (prix d\'achat)', D.stockVal], ['Écarts de caisse du mois', D.ecarts], ['Ventes annulées (nombre)', D.canc.length]] });
+  S.push({ name: 'Journal des ventes', title: 'Journal des ventes', sub, head: ['N°', 'Date', 'Heure', 'Vendeur', 'Client', 'Paiement', 'Opérateur / réf.', 'Montant brut', 'Remise', 'Total', 'Coût d\'achat', 'Marge', 'Note'], widths: [7, 11, 7, 14, 16, 13, 20, 13, 10, 13, 13, 12, 22],
+    rows: D.sales.slice().reverse().map(s => [s.no, dt(s.date), hm(s.date), userName(s.user), s.client || '', PAY[s.pay], [s.op, s.ref].filter(Boolean).join(' '), s.sub ?? s.total + (s.discount || 0), s.discount || 0, s.total, D.costOf(s), s.total - D.costOf(s), s.retOf ? 'Retour vente n°' + s.retOf : '']),
+    total: ['Total', '', '', '', '', '', '', D.sales.reduce((t, s) => t + (s.sub ?? s.total + (s.discount || 0)), 0), D.disc, D.ca, D.cogs, D.marge, ''] });
+  S.push({ name: 'Détail des articles', title: 'Articles vendus', sub, head: ['N° vente', 'Date', 'Produit', 'Quantité', 'Prix unitaire', 'Total ligne', 'Coût d\'achat'], widths: [9, 11, 34, 10, 13, 13, 13],
+    rows: D.sales.slice().reverse().flatMap(s => s.items.map(i => [s.no, dt(s.date), i.name, i.qty, i.price, Math.round(i.qty * i.price), Math.round(i.qty * (i.cost || 0))])) });
+  S.push({ name: 'Encaissements par jour', title: 'Encaissements par jour', sub, head: ['Date', 'Ventes', 'Espèces', 'Mobile Money', 'À crédit', 'Total ventes', 'Crédits remboursés'], widths: [12, 9, 14, 14, 13, 14, 16],
+    rows: Object.keys(D.days).sort().map(d => { const x = D.days[d]; return [dt(d + 'T12:00:00'), x.n, x.cash, x.momo, x.credit, x.ca, x.rep]; }), total: ['Total', D.sales.length, D.by.cash || 0, D.by.momo || 0, D.by.credit || 0, D.ca, D.repayT] });
+  S.push({ name: 'Dépenses', title: 'Dépenses', sub, head: ['Date', 'Catégorie', 'Détail', 'Montant', 'Payé avec', 'Saisi par'], widths: [11, 20, 30, 13, 18, 14],
+    rows: D.exps.slice().reverse().map(e => [dt(e.date), e.cat, e.detail || '', e.amount, e.method === 'cash' ? 'Caisse' : e.method === 'momo' ? 'Mobile Money' : 'Hors caisse', userName(e.user)]), total: ['Total', '', '', D.exps.reduce((t, e) => t + e.amount, 0), '', ''] });
+  S.push({ name: 'Fournisseurs', title: 'Fournisseurs', sub, head: ['Fournisseur', 'Achats du mois', 'Payé dans le mois', 'Reste dû en fin de mois'], widths: [28, 16, 18, 22],
+    rows: D.sup.map(x => [x.name, x.bought, x.paidM, x.bal]), total: ['Total', D.sup.reduce((t, x) => t + x.bought, 0), D.sup.reduce((t, x) => t + x.paidM, 0), D.sup.reduce((t, x) => t + x.bal, 0)] });
+  S.push({ name: 'Crédits clients', title: 'Crédits clients', sub, head: ['Client', 'Vendu à crédit ce mois', 'Remboursé ce mois', 'Reste dû en fin de mois'], widths: [28, 20, 18, 22],
+    rows: D.cli.map(x => [x.n, x.soldM, x.paidM, x.bal]), total: ['Total', D.cli.reduce((t, x) => t + x.soldM, 0), D.cli.reduce((t, x) => t + x.paidM, 0), D.cli.reduce((t, x) => t + x.bal, 0)] });
+  S.push({ name: 'Stock fin de mois', title: 'Stock au dernier jour du mois', sub, head: ['Code', 'Produit', 'Catégorie', 'Quantité', 'Prix d\'achat', 'Prix de vente', 'Valeur (achat)'], widths: [9, 34, 16, 10, 13, 13, 15],
+    rows: D.stock.map(x => [x.code, x.name, x.cat, x.q, x.cost, x.price, x.val]), total: ['Total', '', '', '', '', '', D.stockVal] });
+  S.push({ name: 'Caisses', title: 'Caisses fermées', sub, head: ['Vendeur', 'Ouverture', 'Fermeture', 'Fond de caisse', 'Attendu', 'Compté', 'Écart', 'Statut'], widths: [14, 16, 16, 14, 13, 13, 11, 12],
+    rows: D.shifts.slice().reverse().map(s => [userName(s.user), new Date(s.start).toLocaleString('fr-FR'), new Date(s.end).toLocaleString('fr-FR'), s.fund || 0, s.expected || 0, s.counted || 0, s.diff || 0, s.status || '']), total: ['Total', '', '', '', '', '', D.ecarts, ''] });
+  return xlsx(S);
+}
+/* ---- PDF d'une page (police Helvetica intégrée aux lecteurs PDF) ---- */
+function comptaPdf(D) {
+  const W1252 = { '€': 128, '‚': 130, 'ƒ': 131, '„': 132, '…': 133, '‘': 145, '’': 146, '“': 147, '”': 148, '•': 149, '–': 150, '—': 151, 'œ': 156, 'Œ': 140 };
+  const pe = s => String(s).replace(/[  ]/g, ' ').split('').map(c => { const k = W1252[c]; if (k) return String.fromCharCode(k); const n = c.charCodeAt(0); return n < 256 ? c : '?'; }).join('').replace(/[\\()]/g, m => '\\' + m);
+  const DW = { ' ': 278, '-': 333, '−': 333, '+': 584, ',': 278, '.': 278 }, wNum = (s, sz) => String(s).split('').reduce((t, c) => t + (/[0-9]/.test(c) ? 556 : DW[c] || 600), 0) * sz / 1000;
+  const ops = []; let y = 0;
+  const txt = (x, yy, s, sz = 10, bold = false, rgb = '0.05 0.06 0.07') => ops.push(`BT ${rgb} rg /${bold ? 'F2' : 'F1'} ${sz} Tf ${x.toFixed(1)} ${yy.toFixed(1)} Td (${pe(s)}) Tj ET`);
+  const rtxt = (xr, yy, s, sz = 10, bold = false, rgb) => txt(xr - wNum(s, sz), yy, s, sz, bold, rgb);
+  const rect = (x, yy, w, h, rgb) => ops.push(`${rgb} rg ${x} ${yy} ${w} ${h} re f`);
+  const line = (x1, yy, x2, rgb = '0.85 0.86 0.88') => ops.push(`${rgb} RG 0.8 w ${x1} ${yy} m ${x2} ${yy} l S`);
+  const N = n => nf(n), L = 48, R = 547;
+  rect(0, 762, 595, 80, '0.05 0.06 0.07'); rect(L, 800, 22, 22, '1 0.36 0.12');
+  txt(L + 32, 805, db.settings.shopName, 18, true, '1 1 1'); txt(L, 776, `Rapport du mois — ${monthLabel(D.k)}`, 12, false, '0.85 0.86 0.88');
+  rtxt(R, 805, '', 10); txt(R - 150, 776, db.settings.ncc ? 'NCC ' + db.settings.ncc : (db.settings.contact || '').slice(0, 34), 9, false, '0.7 0.72 0.75');
+  y = 728;
+  const kp = [['Chiffre d\'affaires', D.ca], ['Marge brute', D.marge], ['Résultat du mois', D.res]];
+  kp.forEach(([l, v], i) => { const x = L + i * 168; rect(x, y - 44, 156, 56, i === 2 ? (v >= 0 ? '0.91 0.97 0.93' : '0.99 0.91 0.91') : '0.95 0.96 0.97'); txt(x + 12, y - 6, l, 9, false, '0.42 0.45 0.5'); txt(x + 12, y - 30, N(v) + ' ' + cur(), 15, true); });
+  y -= 76;
+  const section = (title, rows, colHead) => {
+    txt(L, y, title, 12, true); y -= 8; line(L, y, R, '0.05 0.06 0.07'); y -= 16;
+    if (colHead) { colHead.forEach(([s, xr]) => typeof xr === 'number' ? rtxt(xr, y, s, 8, true, '0.42 0.45 0.5') : txt(L, y, s, 8, true, '0.42 0.45 0.5')); y -= 14; }
+    rows.forEach(r => { if (y < 70) return; r.cells.forEach(([s, xr]) => typeof xr === 'number' ? rtxt(xr, y, s, 10, !!r.b) : txt(L + (r.ind || 0), y, s, 10, !!r.b)); y -= 5; line(L, y, R); y -= 12; });
+    y -= 10;
+  };
+  section('Résultat', [
+    { cells: [['Chiffre d\'affaires (' + D.sales.length + ' ventes)'], [N(D.ca), R]] }, { cells: [['Coût d\'achat des marchandises vendues'], ['- ' + N(D.cogs), R]] },
+    { b: 1, cells: [['Marge brute' + (D.ca ? ' (' + Math.round(D.marge / D.ca * 100) + ' %)' : '')], [N(D.marge), R]] }, { cells: [['Dépenses (hors achats de marchandises)'], ['- ' + N(D.dep), R]] },
+    { b: 1, cells: [['Résultat du mois'], [N(D.res), R]] }]);
+  section('Encaissements', [{ cells: [['Espèces'], [N(D.by.cash || 0), R]] }, { cells: [['Mobile Money'], [N(D.by.momo || 0), R]] }, { cells: [['Vendu à crédit'], [N(D.by.credit || 0), R]] }, { cells: [['Crédits remboursés par les clients'], [N(D.repayT), R]] }]);
+  const dc = Object.entries(D.depCat).sort((a, b) => b[1] - a[1]);
+  if (dc.length) section('Dépenses par catégorie', dc.slice(0, 6).map(([c, v]) => ({ cells: [[c], [N(v), R]] })));
+  section('Situation en fin de mois', [{ cells: [['Valeur du stock (prix d\'achat)'], [N(D.stockVal), R]] }, { cells: [['Crédits clients à recevoir'], [N(D.cli.reduce((t, x) => t + x.bal, 0)), R]] },
+    { cells: [['Dettes envers les fournisseurs'], [N(D.sup.reduce((t, x) => t + x.bal, 0)), R]] }, { cells: [['Achats de marchandises du mois'], [N(D.achats), R]] },
+    { cells: [['Écarts de caisse (' + D.shifts.length + ' caisse' + (D.shifts.length > 1 ? 's fermées)' : ' fermée)')], [N(D.ecarts), R]] }, { cells: [['Ventes annulées'], [String(D.canc.length), R]] }]);
+  txt(L, 40, `Montants en ${cur()}. Généré par Boutik le ${new Date().toLocaleDateString('fr-FR')}. Document de gestion, ne remplace pas les factures et reçus normalisés (FNE / RNE).`, 7.5, false, '0.42 0.45 0.5');
+  const content = ops.join('\n'), objs = [];
+  objs.push('<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>', `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+  let out = '%PDF-1.4\n%\xe2\xe3\xcf\xd3\n'; const offs = [];
+  objs.forEach((o, i) => { offs.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const xr = out.length; out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offs.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('')}trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF`;
+  const u = new Uint8Array(out.length); for (let i = 0; i < out.length; i++) u[i] = out.charCodeAt(i) & 255; return u;
+}
+/* ---- écran ---- */
+function comptaFiles(k) { const D = comptaData(k), base = `boutik-${(db.settings.shopName || 'boutique').toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${k}`; return { D, files: [{ name: base + '.xlsx', data: comptaXlsx(D), type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }, { name: base + '-rapport.pdf', data: comptaPdf(D), type: 'application/pdf' }] }; }
+VIEWS.compta = function () {
+  if (!isOwner()) return go('vendre');
+  const ks = [...new Set([monthKey(now()), ...db.sales.map(s => monthKey(s.date)), ...db.expenses.map(e => monthKey(e.date))])].sort().reverse().slice(0, 12);
+  const k = ui.cmois && ks.includes(ui.cmois) ? ui.cmois : ks[0], D = comptaData(k), ac = db.settings.accountant || {};
+  main().innerHTML = `<h1>Dossier comptable</h1>
+    <div class="chips">${ks.map(x => `<button class="chip ${x === k ? 'on' : ''}" onclick="ui.cmois='${x}';VIEWS.compta()">${monthLabel(x)}</button>`).join('')}</div>
+    <div class="hero"><div class="lbl">Résultat de ${monthLabel(k)}</div><div class="big num">${money(D.res)}</div>
+      <div class="row2"><div>Chiffre d'affaires<b class="num">${nf(D.ca)}</b></div><div>Marge<b class="num">${nf(D.marge)}</b></div><div>Dépenses<b class="num">${nf(D.dep)}</b></div><div>Stock fin de mois<b class="num">${nf(D.stockVal)}</b></div></div></div>
+    <div class="card"><b>Le dossier contient</b><div class="mut" style="margin-top:4px">Un fichier Excel de 9 onglets (synthèse, journal des ventes, détail des articles, encaissements par jour, dépenses, fournisseurs, crédits clients, stock en fin de mois, caisses) et un rapport PDF d'une page pour vous ou votre banque.</div>
+      <div class="g2" style="margin-top:12px"><button class="btn ghost" onclick="comptaSave('${k}',0)">${ic('down', 's')} Excel</button><button class="btn ghost" onclick="comptaSave('${k}',1)">${ic('down', 's')} Rapport PDF</button></div>
+      <button class="btn acc full" style="margin-top:10px" onclick="comptaSend('${k}')">${ic('send', 's')} Envoyer au comptable</button></div>
+    <h3>Votre comptable</h3><div class="card"><label class="f" style="margin-top:0">Nom</label><input id="acn" value="${esc(ac.name || '')}" placeholder="Ex : Cabinet Koffi">
+      <div class="g2"><div><label class="f">WhatsApp</label><input id="acw" inputmode="tel" value="${esc(ac.wa || '')}" placeholder="07 00 00 00 00"></div><div><label class="f">E-mail</label><input id="acm" inputmode="email" value="${esc(ac.mail || '')}" placeholder="cabinet@exemple.ci"></div></div>
+      <button class="btn soft full" style="margin-top:10px" onclick="db.settings.accountant={name:v('acn').trim(),wa:v('acw').trim(),mail:v('acm').trim()};save();toast('Comptable enregistré')">Enregistrer</button></div>
+    <div class="mut" style="margin:8px 4px">Document de gestion : il aide votre comptable mais ne remplace pas les factures et reçus normalisés (FNE / RNE) de la DGI.</div>`;
+};
+async function comptaSave(k, i) { const f = comptaFiles(k).files[i]; await download(f.name, f.data, f.type); log('Dossier comptable', `${monthLabel(k)} — ${f.name}`); save(); }
+async function comptaSend(k) {
+  const { files, D } = comptaFiles(k), ac = db.settings.accountant || {}, shop = db.settings.shopName;
+  const msg = `Bonjour${ac.name ? ' ' + ac.name : ''}, voici le dossier comptable de ${monthLabel(k)} de « ${shop} » (Excel et rapport PDF). Chiffre d'affaires : ${money(D.ca)}, résultat : ${money(D.res)}.`;
+  log('Dossier comptable envoyé', monthLabel(k)); save();
+  if (NATIVE && NATIVE.shareFiles) { try { await NATIVE.shareFiles(files.map(f => ({ name: f.name, base64: u8b64(f.data) })), msg); return; } catch (e) { if (/cancel/i.test(String(e && e.message))) return; } }
+  try { const fl = files.map(f => new File([f.data], f.name, { type: f.type })); if (navigator.canShare && navigator.canShare({ files: fl })) { await navigator.share({ files: fl, title: `Dossier ${monthLabel(k)}`, text: msg }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+  // Sans partage de fichiers : on télécharge, puis on ouvre WhatsApp ou l'e-mail avec le message (pièces jointes à ajouter).
+  for (const f of files) await download(f.name, f.data, f.type);
+  const tel = String(ac.wa || '').replace(/\D/g, ''), wa = tel.length === 10 && tel[0] === '0' ? '225' + tel : tel;
+  modal('Envoyer au comptable', `<div class="mut" style="margin-bottom:10px">Les deux fichiers sont téléchargés sur cet appareil. Ouvrez WhatsApp ou l'e-mail, puis joignez-les au message.</div>
+    <div class="list card" style="padding:4px 16px"><a class="it tap" target="_blank" rel="noopener" href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}"><div class="ico ok">${ic('send')}</div><div class="grow"><b>WhatsApp</b><div class="mut">${wa ? '+' + wa : 'Choisir le contact'}</div></div>${ic('chev', 's')}</a>
+    <a class="it tap" href="mailto:${esc(ac.mail || '')}?subject=${encodeURIComponent(`Dossier comptable ${monthLabel(k)} — ${shop}`)}&body=${encodeURIComponent(msg)}"><div class="ico">${ic('inbox')}</div><div class="grow"><b>E-mail</b><div class="mut">${esc(ac.mail || 'Choisir le destinataire')}</div></div>${ic('chev', 's')}</a></div>`);
+}
+function u8b64(u) { let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
+
 /* ================= PLUS ================= */
 VIEWS.plus = function () {
   if (!isOwner()) return go('vendre');
-  const items = [['fonctions', 'sliders', 'Fonctions de l\'appli', 'Activez seulement ce dont vous avez besoin'], (F('multi') || SHOPS.list.length > 1) && ['boutiques', 'store', 'Mes boutiques', 'Toutes vos boutiques d\'un coup d\'œil'], ['ventes', 'receipt', 'Toutes les ventes', 'Filtrer par jour, vendeur, anomalies'], F('momoCheck') && F('momo') && ['momo', 'phone', 'Vérifier le Mobile Money', 'Comparer les ventes avec vos SMS'], F('credit') && ['credits', 'card', 'Crédits clients', 'Qui doit combien, rappels WhatsApp'], F('fournisseurs') && ['fournisseurs', 'inbox', 'Fournisseurs', 'Achats, dettes, paiements'], F('depenses') && ['depenses', 'money', 'Dépenses', 'Loyer, transport, électricité…'], ['equipe', 'users', 'Équipe & droits', 'Vendeurs, codes, ce qu\'ils peuvent faire'], ['journal', 'history', 'Journal d\'activité', 'Chaque action, qui, quand'], ['materiel', 'print', 'Imprimantes et étiquettes', 'Commander le matériel pour imprimer vos étiquettes'], ['reglages', 'sliders', 'Paramètres & sauvegarde', 'Boutique, code secret, export Excel']];
+  const items = [['fonctions', 'sliders', 'Fonctions de l\'appli', 'Activez seulement ce dont vous avez besoin'], (F('multi') || SHOPS.list.length > 1) && ['boutiques', 'store', 'Mes boutiques', 'Toutes vos boutiques d\'un coup d\'œil'], ['ventes', 'receipt', 'Toutes les ventes', 'Filtrer par jour, vendeur, anomalies'], F('momoCheck') && F('momo') && ['momo', 'phone', 'Vérifier le Mobile Money', 'Comparer les ventes avec vos SMS'], F('credit') && ['credits', 'card', 'Crédits clients', 'Qui doit combien, rappels WhatsApp'], F('fournisseurs') && ['fournisseurs', 'inbox', 'Fournisseurs', 'Achats, dettes, paiements'], F('depenses') && ['depenses', 'money', 'Dépenses', 'Loyer, transport, électricité…'], ['equipe', 'users', 'Équipe & droits', 'Vendeurs, codes, ce qu\'ils peuvent faire'], ['journal', 'history', 'Journal d\'activité', 'Chaque action, qui, quand'], ['alertes', 'bell', 'Alertes', 'Ce qui demande votre attention, et notifications'], ['compta', 'receipt', 'Dossier comptable', 'Excel et rapport PDF du mois, envoi au comptable'], ['materiel', 'print', 'Imprimantes et étiquettes', 'Commander le matériel pour imprimer vos étiquettes'], ['reglages', 'sliders', 'Paramètres & sauvegarde', 'Boutique, code secret, export Excel']];
   main().innerHTML = `<h1>Plus</h1><div class="card list" style="padding:4px 16px">${items.filter(Boolean).map(([k, i, l, d]) => `<div class="it tap" onclick="go('${k}')"><div class="ico">${ic(i)}</div><div class="grow"><b>${l}</b><div class="mut">${d}</div></div>${ic('chev', 's')}</div>`).join('')}</div>`;
 };
 
@@ -1715,16 +2014,34 @@ async function enableOnline() {
   } catch (e) { SYNC.cfg = null; saveSyncState(); toast('Serveur injoignable. Vérifiez l\'adresse et internet.'); }
 }
 function showPair() {
-  const code = pairCode();
-  modal('Connecter un téléphone', `<p class="mut" style="margin-top:0">Sur l'autre téléphone, ouvrez Boutik, touchez <b style="color:var(--ink)">« Rejoindre ma boutique »</b> et scannez ce code.</p>
+  const code = pairCode(); setTimeout(loadPairCode, 50);
+  modal('Connecter un téléphone', `<p class="mut" style="margin-top:0">Sur l'autre téléphone, ouvrez Boutik, touchez <b style="color:var(--ink)">« Rejoindre ma boutique »</b> (sur ordinateur : « Se connecter » sur le site), puis tapez ce code.</p>
+    <div class="card" style="text-align:center;padding:18px"><div class="mut">Code à taper sur l'autre téléphone ou l'ordinateur</div><div id="pcode" class="num" style="font-size:44px;font-weight:800;letter-spacing:.12em;margin:6px 0">· · ·</div><div class="mut" id="pttl">Valable 10 minutes</div></div>
+    <div class="mut" style="text-align:center;margin:6px 0">ou scannez ce QR code</div>
     <div class="card" style="display:flex;justify-content:center;padding:20px">${QR.svg(code, 5)}</div>
     <div class="card row" style="background:var(--warnl)"><div class="ico warn">${ic('lock')}</div><div class="grow mut">Ce code donne accès à toute la boutique. Ne le montrez qu'à vos propres téléphones.</div></div>
     <a class="btn ghost full" target="_blank" href="${waLink('', 'Code Boutik (à coller dans « Rejoindre ma boutique ») :\n' + code)}">${ic('send', 's')} Envoyer le code par WhatsApp</a>`);
 }
 async function leaveOnline() { if (!(await ask('Déconnecter cet appareil du suivi à distance ?', { ok: 'Déconnecter', danger: true, sub: 'Les données restent sur ce téléphone.' }))) return; SYNC.cfg = null; SYNC.hashes = {}; saveSyncState(); render(); }
+async function loadPairCode() {
+  try { const j = await api('/api/pair/start', { shop: SYNC.cfg.shop, key: SYNC.cfg.key }), el = document.getElementById('pcode'); if (el) el.textContent = j.code.slice(0, 3) + ' ' + j.code.slice(3); }
+  catch (e) { const el = document.getElementById('pcode'); if (el) { el.style.fontSize = '16px'; el.textContent = 'Pas de connexion : utilisez le QR code'; } const t = document.getElementById('pttl'); if (t) t.textContent = ''; }
+}
+async function joinByNumber() {
+  const code = v('jnum').replace(/\D/g, ''), url = (v('jsrv') || serverURL() || '').replace(/\/+$/, '');
+  if (code.length !== 6) return toast('Le code a 6 chiffres');
+  if (!url) return toast('Adresse du serveur inconnue : utilisez le QR code');
+  try { const r = await fetch(url + '/api/pair/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) }), j = await r.json();
+    if (!r.ok) return toast(j.error || 'Code incorrect'); closeModal(); joinShop(`BOUTIK1|${url}|${j.shop}|${j.key}`); }
+  catch (e) { toast('Pas de connexion'); }
+}
 function joinSheet() {
-  modal('Rejoindre ma boutique', `<p class="mut" style="margin-top:0">Sur le premier téléphone : Plus → Paramètres → « Connecter un autre téléphone ».</p>
-    <button class="btn acc full xl" onclick="closeModal();openScanner({title:'Scanner le code de la boutique',allowManual:false,panel:()=>'',onCodes:c=>{const x=c.find(z=>z.startsWith('BOUTIK1|'));if(x){closeScanner();joinShop(x);}}})">${ic('scan')} Scanner le code</button>
+  modal('Rejoindre ma boutique', `<p class="mut" style="margin-top:0">Sur le téléphone du patron : Plus → Paramètres → « Connecter un autre téléphone ». Un code à 6 chiffres s'affiche.</p>
+    <label class="f">Code à 6 chiffres</label><input id="jnum" inputmode="numeric" maxlength="7" placeholder="123 456" style="font-size:26px;letter-spacing:.15em;text-align:center">
+    ${serverURL() ? '' : '<label class="f">Adresse du serveur Boutik</label><input id="jsrv" inputmode="url" placeholder="https://…">'}
+    <button class="btn acc full xl" style="margin-top:12px" onclick="joinByNumber()">Rejoindre</button>
+    <div class="mut" style="text-align:center;margin:14px 0 4px">ou</div>
+    <button class="btn ghost full" onclick="closeModal();openScanner({title:'Scanner le code de la boutique',allowManual:false,panel:()=>'',onCodes:c=>{const x=c.find(z=>z.startsWith('BOUTIK1|'));if(x){closeScanner();joinShop(x);}}})">${ic('scan')} Scanner le code</button>
     <label class="f">Ou collez le code reçu</label><textarea id="jcode" rows="3" placeholder="BOUTIK1|…"></textarea>
     <button class="btn full" style="margin-top:10px" onclick="joinShop(v('jcode'))">Rejoindre</button>`);
 }
@@ -2014,6 +2331,9 @@ const HOWTO = [
   [/perim|peremption|date limite|\bdlc\b/, 'Péremption', () => { if (!F('peremption')) return 'Activez ' + B('Dates de péremption') + ' dans Fonctions, puis indiquez la date la plus proche dans la fiche de chaque produit.'; const l = db.products.filter(p => p.active && expSoon(p)).sort((a, b) => a.exp.localeCompare(b.exp)); return l.length ? B(l.length + ' produit(s) à vendre vite') + ' :<ul>' + l.slice(0, 8).map(p => `<li>${esc(p.name)} : ${daysTo(p.exp) < 0 ? 'périmé' : 'dans ' + daysTo(p.exp) + ' j'} (${nq(p.stock)} en stock)</li>`).join('') + '</ul>Mettez-les en avant ou faites une petite promotion.' : 'Aucun produit ne périme dans les ' + EXP_DAYS + ' prochains jours.'; }, () => [act('Voir', () => { ui.stockFilter = 'exp'; go('stock'); })]],
   [/retour|echange|rembours|rapporte/, 'Retour ou échange', () => 'Ouvrez la vente (Mes ventes ou Toutes les ventes), puis ' + B('Retour ou échange') + '. Choisissez les articles rendus : ils reviennent dans le stock. ' + B('Rembourser') + ' rend l\'argent ; ' + B('Échanger') + ' permet d\'ajouter les nouveaux articles et d\'encaisser la différence.' + (isOwner() ? '' : ' Le code du patron est demandé.'), () => []],
   [/taille|couleur|variante|vetement|chaussure|pointure/, 'Tailles et couleurs', () => 'Activez ' + B('Tailles et couleurs') + ' dans Fonctions, puis ' + B('Stock → Modèle tailles / couleurs') + ' : nom, prix, tailles (ex. S, M, L), couleurs et stock de chaque variante. Chaque variante a ses étiquettes ; à la caisse, le modèle s\'ouvre sur la grille des tailles.', () => isOwner() ? [act('Stock', () => go('stock'))] : []],
+  [/comptab|bilan du mois|rapport (du |mensuel)|dossier|expert|impots/, 'Dossier comptable', () => 'Allez dans ' + B('Plus → Dossier comptable') + ' : choisissez le mois, puis ' + B('Excel') + ' (9 onglets), ' + B('Rapport PDF') + ' ou ' + B('Envoyer au comptable') + '. Enregistrez une fois son WhatsApp ou son e-mail.', () => isOwner() ? [act('Ouvrir', () => go('compta'))] : []],
+  [/alerte|notif|prevenu|surstock|stock max/, 'Alertes', () => 'Touchez la ' + B('cloche') + ' en haut : la liste de ce qui demande votre attention, vos règles (seuils, horaires) et ' + B('Activer les notifications') + ' pour être prévenu même appli fermée. Le stock maximum se règle dans chaque produit.', () => isOwner() ? [act('Alertes', () => go('alertes'))] : []],
+  [/\blots?\b|numero de lot|arrivage/, 'Numéros de lot', () => 'Activez ' + B('Numéros de lot') + ' dans Fonctions. À la réception, saisissez le n° de lot et sa date pour chaque produit. La vente sort d\'abord le lot qui périme le plus tôt ; la fiche du produit montre ce qui reste de chaque lot et imprime l\'étiquette du lot (scannable).', () => []],
   [/supprimer (mon |le )?compte|supprimer (ma )?boutique|effacer (mon )?compte/, 'Supprimer mon compte', () => 'Le propriétaire va dans ' + B('Paramètres → Compte → Supprimer mon compte') + ' et confirme avec son code. La boutique et ses données sont effacées définitivement du serveur et du téléphone.', () => isOwner() ? [act('Paramètres', () => go('reglages'))] : []],
   [/abonnement|expire|payer boutik/, 'Abonnement', () => { const sb = SYNC.cfg && SYNC.cfg.sub; return sb ? `Votre abonnement est ${B(esc(sb.status))} jusqu'au ${B(new Date(sb.until).toLocaleDateString('fr-FR'))}. ${sb.support ? 'Contact : ' + esc(sb.support) : ''}` : 'La boutique n\'est pas encore en ligne : l\'abonnement concerne le suivi à distance (Paramètres → Mettre ma boutique en ligne).'; }, () => []],
 ];

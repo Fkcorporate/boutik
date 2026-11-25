@@ -6,6 +6,7 @@ import { BleClient } from '@capacitor-community/bluetooth-le';
 import { BiometricAuth } from '@aparajita/capacitor-biometric-auth';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import { FirebaseMessaging } from '@capacitor-firebase/messaging';
 
 const FORMATS = [BarcodeFormat.QrCode, BarcodeFormat.Ean13, BarcodeFormat.Ean8, BarcodeFormat.Code128, BarcodeFormat.UpcA, BarcodeFormat.UpcE, BarcodeFormat.Code39];
 let scanListener = null;
@@ -75,6 +76,23 @@ window.BoutikNative = {
   },
 
   // Exports (Excel, sauvegarde, étiquettes) : enregistrés puis partagés (WhatsApp, e-mail, Drive…)
+  // Notifications (Firebase Cloud Messaging, Android et iPhone) : renvoie le jeton à donner au serveur Boutik
+  push: {
+    async register() {
+      const p = await FirebaseMessaging.requestPermissions();
+      if (p.receive !== 'granted') throw new Error('Notifications refusées dans les réglages du téléphone');
+      const { token } = await FirebaseMessaging.getToken();
+      FirebaseMessaging.addListener('notificationActionPerformed', () => { try { location.hash = 'alertes'; window.go && window.go('alertes'); } catch (e) {} });
+      return token;
+    }
+  },
+
+  // Plusieurs fichiers binaires (Excel, PDF) en une fois : WhatsApp, e-mail…
+  async shareFiles(files, text) {
+    const uris = [];
+    for (const f of files) { const r = await Filesystem.writeFile({ path: f.name, data: f.base64, directory: Directory.Cache }); uris.push(r.uri); }
+    await Share.share({ title: files[0].name, text: text || '', files: uris });
+  },
   async saveFile(name, content) {
     const r = await Filesystem.writeFile({ path: name, data: content, directory: Directory.Cache, encoding: Encoding.UTF8 });
     await Share.share({ title: name, files: [r.uri] });

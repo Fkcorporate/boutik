@@ -126,3 +126,25 @@ Même clé `ANTHROPIC_API_KEY` que l'assistant. Le commerçant active « Comptag
 - **Dans l'appli :** le propriétaire va dans Paramètres → Compte → Supprimer mon compte. La boutique est effacée du serveur et du téléphone.
 - **Sur le web :** `/suppression-compte`, avec le code de la boutique, ou par une demande. Les demandes apparaissent en haut de votre console : vérifiez l'identité, supprimez la boutique (fiche → Supprimer la boutique), puis marquez la demande traitée, sous 30 jours.
 - Chaque suppression est notée dans `_deletions.json`, avec la date et le moyen utilisé, sans les données de la boutique.
+
+## Alertes et notifications
+
+- **Dans l'appli** : la cloche en haut (patron) affiche ce qui demande son attention :
+  - stock bas, ruptures, surstock, péremptions ;
+  - ventes à perte, grosses remises, ventes hors horaires, retours ;
+  - manques et caisses pas fermées, annulations, Mobile Money à vérifier ;
+  - produits qui ne se vendent plus.
+
+  Le patron règle les seuils et les horaires.
+- **Sur le téléphone, appli fermée** : le serveur envoie la notification dès qu'un téléphone de la boutique synchronise l'événement. Il vérifie aussi, toutes les 5 minutes, les caisses pas fermées à l'heure et envoie le point du matin vers 8 h.
+  - Version web installée (Android, iPhone installé sur l'écran d'accueil) : rien à configurer. Les clés sont créées au premier démarrage dans `DATA_DIR/_vapid.json`. **Ne supprimez pas ce fichier**, sinon chaque patron devra réactiver les notifications.
+  - Application des stores : variable `FCM_SERVICE_ACCOUNT` (voir `boutik-mobile/GUIDE-STORES.md`, étape 4 bis).
+- Les heures des règles sont celles du téléphone du patron (fuseau envoyé par l'appli).
+
+## Numéros de lot
+
+À activer dans Fonctions.
+- **À la réception** : n° de lot et date de péremption pour chaque produit.
+- **À la vente** : sortie automatique du lot qui périme le plus tôt, ou du lot dont on scanne l'étiquette (`P0007-L2`).
+- **Fiche produit** : reste par lot, et étiquette du lot à imprimer.
+- **Annulations et retours** : la marchandise retourne dans son lot d'origine.

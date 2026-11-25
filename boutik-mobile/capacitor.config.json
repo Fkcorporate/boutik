@@ -4,7 +4,9 @@
   "webDir": "www",
   "backgroundColor": "#f3f4f6",
   "plugins": {
-    "CapacitorHttp": { "enabled": true },
+    "CapacitorHttp": {
+      "enabled": true
+    },
     "BluetoothLe": {
       "displayStrings": {
         "scanning": "Recherche de l'imprimante…",
@@ -12,6 +14,13 @@
         "availableDevices": "Appareils disponibles",
         "noDeviceFound": "Aucun appareil trouvé"
       }
+    },
+    "FirebaseMessaging": {
+      "presentationOptions": [
+        "badge",
+        "sound",
+        "alert"
+      ]
     }
   }
 }

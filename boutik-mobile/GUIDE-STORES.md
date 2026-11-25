@@ -92,6 +92,21 @@ npm run build && npx cap sync
    - **Suppression de compte (règle 5.1.1(v)) :** indiquez dans les notes où elle se trouve : « Plus → Paramètres → Compte → Supprimer mon compte ». Elle efface la boutique du serveur et du téléphone.
 6. Une fois publiée, collez le lien App Store dans **/admin → Réglages**.
 
+## 4 bis. Notifications sur le téléphone du patron (Firebase, gratuit)
+
+Sans cette étape, l'application fonctionne normalement, mais sans notifications quand elle est fermée. La version web installée (Android, et iPhone en version installée sur l'écran d'accueil) les reçoit déjà sans Firebase.
+
+1. Sur **console.firebase.google.com**, créez un projet « Boutik » (gratuit).
+2. **Android** : ajoutez une appli Android avec l'identifiant `com.boutik.caisse`. Téléchargez `google-services.json` et copiez-le dans `android/app/`.
+3. **iPhone** :
+   - ajoutez une appli iOS avec le même identifiant, puis copiez `GoogleService-Info.plist` dans `ios/App/App/` avec Xcode ;
+   - dans Xcode → *Signing & Capabilities*, ajoutez **Push Notifications** et **Background Modes → Remote notifications** ;
+   - sur developer.apple.com, créez une **clé APNs** (.p8) et envoyez-la dans Firebase → Paramètres du projet → Cloud Messaging.
+4. **Serveur** : dans Firebase → Paramètres du projet → Comptes de service, cliquez sur *Générer une nouvelle clé privée*. Collez **tout le contenu** du fichier JSON dans la variable Render `FCM_SERVICE_ACCOUNT`.
+5. `npm install` puis `npx cap sync`, et recompilez. Dans l'appli : Alertes (la cloche) → **Activer les notifications** → *Envoyer un essai*.
+
+> Le module `@capacitor-firebase/messaging` doit être de la même génération que Capacitor (8). Si `npm install` signale une incompatibilité, prenez la version que la documentation du module indique pour Capacitor 8.
+
 ## 5. Installer sans passer par les stores
 
 **Android : oui.**
